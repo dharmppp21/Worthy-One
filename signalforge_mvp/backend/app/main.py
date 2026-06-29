@@ -18,8 +18,14 @@ from app.routers import (
     search,
     websocket,
 )
-from app.database import DATABASE_URL
+from app.routers import discovery as discovery_router
+from app.database import DATABASE_URL, SessionLocal
 from app.services.kafka_consumer_worker import start_consumer_worker
+
+from app.discovery.environment import AutoConfigurator
+from app.discovery.engine import DiscoveryEngine
+from app.discovery.registry import ServiceRegistry
+from app.routers.discovery import set_discovery_engine
 
 from alembic.config import Config
 from alembic import command
@@ -80,9 +86,34 @@ def create_app() -> FastAPI:
     app.include_router(root_cause.router)
     app.include_router(ai_triage.router)
     app.include_router(websocket.router)
+    app.include_router(discovery_router.router)
 
     # Start Kafka consumer worker in background thread
     start_consumer_worker()
+
+    # ------------------------------------------------------------------
+    # Service Discovery Setup
+    # ------------------------------------------------------------------
+    configurator = AutoConfigurator()
+    if configurator.enabled:
+        db_session = SessionLocal()
+        try:
+            registry = ServiceRegistry(db_session=db_session)
+            engine = DiscoveryEngine(registry=registry)
+            providers = configurator.instantiate_providers()
+            for provider in providers:
+                engine.register_provider(provider)
+            set_discovery_engine(engine)
+            if providers:
+                engine.start_background_discovery(interval_seconds=configurator.interval)
+            else:
+                from app.logging_config import get_logger
+                logger_local = get_logger("app.main")
+                logger_local.info("No discovery providers configured; discovery engine idle.")
+        except Exception as exc:
+            from app.logging_config import get_logger
+            logger_local = get_logger("app.main")
+            logger_local.warning("Discovery engine setup failed: %s", exc)
 
     return app
 
