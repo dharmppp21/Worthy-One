@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Float, Index, JSON, String
+from sqlalchemy import Boolean, Column, DateTime, Float, Index, Integer, JSON, String
 from sqlalchemy.orm import declarative_base
 
 from app.database import Base
@@ -87,4 +87,28 @@ class RunbookModel(Base):
 
     __table_args__ = (
         Index("idx_runbooks_tenant_service", "tenant_id", "service_name"),
+    )
+
+
+class ServiceDependencyDB(Base):
+    """SQLAlchemy ORM model for service dependency relationships."""
+
+    __tablename__ = "service_dependencies"
+
+    id = Column(String(128), primary_key=True)
+    source_service_id = Column(String(128), index=True, nullable=False)
+    target_service_id = Column(String(128), index=True, nullable=False)
+    dependency_type = Column(String(128), nullable=False, default="unknown")
+    connection_count = Column(Integer, nullable=False, default=1)
+    avg_latency_ms = Column(Float, nullable=True)
+    error_rate = Column(Float, nullable=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=False)
+    confidence_score = Column(Float, nullable=False, default=0.5)
+    discovery_sources = Column(JSON, nullable=False, default=list)
+    tenant_id = Column(String(128), index=True, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index("idx_dep_source_target", "source_service_id", "target_service_id"),
     )
