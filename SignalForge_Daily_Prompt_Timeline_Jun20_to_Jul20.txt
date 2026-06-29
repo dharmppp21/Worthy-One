@@ -1,0 +1,400 @@
+SignalForge Daily Prompt Timeline
+June 20, 2026 to July 20, 2026
+
+Purpose:
+Use this file as your daily execution plan. Each day, copy the exact prompt for that date and send it to me. I will implement that day's work in the existing SignalForge project.
+
+Project baseline:
+- Main guide: SignalForge_Step_By_Step_Build_Guide.txt
+- Starting codebase: signalforge_mvp
+- Final target date: July 20, 2026
+- Default approach: local-first development with Docker. If AI API keys or cloud credentials are unavailable, use mock/provider interfaces and production-like local deployment.
+
+
+Day 1 - June 20, 2026
+
+Prompt to give Codex:
+"Audit the existing SignalForge starter project, explain the current architecture in simple practical terms, install/run what is needed, fix any immediate startup issues, and make the backend plus simulator produce the first incident."
+
+Goal/output:
+- Confirm the current backend, simulator, and frontend structure.
+- Run or verify the backend API.
+- Run or verify the simulator.
+- Confirm that bad payment-service traffic creates an incident.
+- Explain the current MVP flow in beginner-friendly language.
+
+
+Day 2 - June 21, 2026
+
+Prompt to give Codex:
+"Clean up the FastAPI backend structure into routers and services where useful, add clear beginner-friendly comments only where they help, and document every endpoint in the README."
+
+Goal/output:
+- Backend is easier to understand and extend.
+- Routes are separated from business logic.
+- README explains health, ingest, events, and incidents endpoints.
+- The MVP still runs exactly as before.
+
+
+Day 3 - June 22, 2026
+
+Prompt to give Codex:
+"Improve telemetry schemas, add event IDs, validation errors, duplicate-event protection, and better sample events for metric, log, trace, and deployment event types."
+
+Goal/output:
+- Telemetry events look closer to production data.
+- Each event has a stable event_id.
+- Duplicate events do not create duplicate processing effects.
+- Sample payloads exist for all important event types.
+
+
+Day 4 - June 23, 2026
+
+Prompt to give Codex:
+"Improve anomaly detection using rolling windows, error-rate thresholds, latency thresholds, and add unit tests for healthy, warning, and critical cases."
+
+Goal/output:
+- Anomaly detection is more reliable and testable.
+- Tests cover normal traffic, high latency, high error rate, and critical failure.
+- The incident engine receives clearer anomaly evidence.
+
+
+Day 5 - June 24, 2026
+
+Prompt to give Codex:
+"Improve incident creation logic so duplicate open incidents are avoided, incidents include timelines and evidence, and incident status can be updated."
+
+Goal/output:
+- Duplicate incident spam is prevented.
+- Incidents include useful context for interview demos.
+- API supports incident status changes such as investigating, mitigated, and resolved.
+
+
+Day 6 - June 25, 2026
+
+Prompt to give Codex:
+"Enhance the traffic simulator to simulate checkout, payment, inventory, fraud, and notification services with normal traffic, bad deploys, timeouts, logs, metrics, and trace IDs."
+
+Goal/output:
+- Simulator creates a realistic microservice story.
+- Traffic includes successful requests, failed requests, logs, trace relationships, and deployment events.
+- Demo incident becomes more believable.
+
+
+Day 7 - June 26, 2026
+
+Prompt to give Codex:
+"Polish the React dashboard for incidents: incident cards, severity colors, incident details, timeline view, empty/loading/error states, and clean responsive layout."
+
+Goal/output:
+- Dashboard is demo-friendly.
+- Incidents are easy to inspect visually.
+- UI handles empty state, loading state, API failure, and populated incident data.
+
+
+Day 8 - June 27, 2026
+
+Prompt to give Codex:
+"Add Docker Compose with PostgreSQL and Redis, update setup docs, and keep the app runnable locally with simple commands."
+
+Goal/output:
+- Local infrastructure is reproducible.
+- PostgreSQL and Redis can start from Docker Compose.
+- README explains how to start the full local stack.
+
+
+Day 9 - June 28, 2026
+
+Prompt to give Codex:
+"Move telemetry events and incidents from in-memory storage to PostgreSQL using SQLAlchemy models, indexes, and clean database access patterns."
+
+Goal/output:
+- Events and incidents survive backend restarts.
+- Database tables are modeled cleanly.
+- Queries are indexed around tenant_id, service_name, timestamp, and incident status.
+
+
+Day 10 - June 29, 2026
+
+Prompt to give Codex:
+"Add database migrations with Alembic and replace create_all-style setup with a proper migration workflow."
+
+Goal/output:
+- Schema changes are version-controlled.
+- Project has repeatable database setup.
+- README explains migration commands.
+
+
+Day 11 - June 30, 2026
+
+Prompt to give Codex:
+"Add Redis rolling windows for recent service events and update anomaly detection to use Redis for hot operational state."
+
+Goal/output:
+- Redis stores recent service telemetry for fast anomaly checks.
+- PostgreSQL remains the durable source of truth.
+- System design clearly separates hot state from durable storage.
+
+
+Day 12 - July 1, 2026
+
+Prompt to give Codex:
+"Add service graph support from trace events, including backend endpoint and frontend visualization of service dependencies."
+
+Goal/output:
+- Trace events produce service dependency edges.
+- API exposes the service graph.
+- Frontend shows which services call each other.
+
+
+Day 13 - July 2, 2026
+
+Prompt to give Codex:
+"Add deployment event tracking and correlate incidents with recent deployments in the incident evidence."
+
+Goal/output:
+- Deployment events are stored and queryable.
+- Incidents show whether a recent deployment happened near the failure.
+- Demo can explain change-based root cause analysis.
+
+
+Day 14 - July 3, 2026
+
+Prompt to give Codex:
+"Add runbook CRUD APIs and a simple UI for adding and viewing runbooks linked to services."
+
+Goal/output:
+- Runbooks can be created, listed, viewed, updated, and deleted.
+- Runbooks can be linked to specific services.
+- The project now has operational memory.
+
+
+Day 15 - July 4, 2026
+
+Prompt to give Codex:
+"Add keyword search over runbooks and incidents, then connect search results to incident detail pages."
+
+Goal/output:
+- Users can search old incidents and runbooks.
+- Incident detail pages show related operational knowledge.
+- Basic incident memory works before vector search is added.
+
+
+Day 16 - July 5, 2026
+
+Prompt to give Codex:
+"Add pgvector support for semantic runbook and incident search, with embedding generation and fallback behavior if no AI key or local embedding model is available."
+
+Goal/output:
+- Semantic search can find similar incidents even when wording differs.
+- pgvector is integrated with PostgreSQL.
+- Fallback behavior keeps the app usable without external AI access.
+
+
+Day 17 - July 6, 2026
+
+Prompt to give Codex:
+"Build rule-based root-cause ranking using evidence from anomaly data, deployments, logs, traces, and similar runbooks."
+
+Goal/output:
+- Triage works even without an LLM.
+- Root-cause hypotheses are evidence-backed.
+- Ranking logic is explainable in interviews.
+
+
+Day 18 - July 7, 2026
+
+Prompt to give Codex:
+"Add an AI triage interface that generates structured incident explanations from only provided evidence, with a mock provider fallback."
+
+Goal/output:
+- AI layer produces structured incident summaries, likely causes, evidence, and suggested actions.
+- The LLM is not treated as the source of truth.
+- Mock provider keeps tests and demos reliable.
+
+
+Day 19 - July 8, 2026
+
+Prompt to give Codex:
+"Add WebSocket incident updates so the dashboard updates live instead of only polling."
+
+Goal/output:
+- Dashboard receives live incident updates.
+- Backend supports WebSocket connections.
+- Polling can remain as fallback if needed.
+
+
+Day 20 - July 9, 2026
+
+Prompt to give Codex:
+"Add Kafka or Redpanda to the architecture for telemetry ingestion, with topics, producer, consumer worker, retries, and dead-letter handling."
+
+Goal/output:
+- Ingestion becomes event-driven.
+- Telemetry events flow through a stream before processing.
+- Invalid or failed events can go to a dead-letter path.
+
+
+Day 21 - July 10, 2026
+
+Prompt to give Codex:
+"Refactor ingestion so the API accepts events quickly, publishes to the stream, and worker processors handle database, Redis, anomaly, and incident updates."
+
+Goal/output:
+- API and processing are decoupled.
+- Worker owns event processing.
+- Architecture can explain backpressure and horizontal scaling.
+
+
+Day 22 - July 11, 2026
+
+Prompt to give Codex:
+"Add integration tests for ingestion-to-incident flow, database persistence, Redis windows, service graph, and runbook search."
+
+Goal/output:
+- Core workflows are tested end to end.
+- Tests prove the main demo path works.
+- Regressions become easier to catch.
+
+
+Day 23 - July 12, 2026
+
+Prompt to give Codex:
+"Add frontend tests or at least build verification, fix TypeScript issues, and make dashboard API errors clear."
+
+Goal/output:
+- Frontend builds reliably.
+- TypeScript issues are fixed.
+- User-facing API failure states are clear.
+
+
+Day 24 - July 13, 2026
+
+Prompt to give Codex:
+"Add load testing scripts to measure ingestion throughput, incident detection delay, and API latency; document measured results."
+
+Goal/output:
+- Project has real performance numbers.
+- Resume bullets can include measured throughput and latency.
+- Bottlenecks are identified and documented.
+
+
+Day 25 - July 14, 2026
+
+Prompt to give Codex:
+"Add auth and tenant isolation basics: tenant_id enforcement, API key or JWT-style auth, and protected dashboard/API routes."
+
+Goal/output:
+- Basic enterprise security story exists.
+- Tenant data boundaries are enforced.
+- Dashboard and APIs are protected.
+
+
+Day 26 - July 15, 2026
+
+Prompt to give Codex:
+"Add production hardening: rate limiting, structured logging, health checks, config via environment variables, and safe error handling."
+
+Goal/output:
+- Backend behaves more like a production service.
+- Configuration is environment-driven.
+- Logs and health checks support operations.
+
+
+Day 27 - July 16, 2026
+
+Prompt to give Codex:
+"Prepare deployment: Dockerfiles, production Compose, and AWS-ready architecture notes. If cloud credentials are unavailable, make local production deployment polished."
+
+Goal/output:
+- App can be packaged for deployment.
+- Local production-style deployment is documented.
+- AWS architecture notes are ready for interviews.
+
+
+Day 28 - July 17, 2026
+
+Prompt to give Codex:
+"Write a strong README with architecture diagram, data flow, setup commands, demo steps, design tradeoffs, and scalability discussion."
+
+Goal/output:
+- README becomes recruiter/interviewer-ready.
+- Architecture and tradeoffs are clearly explained.
+- Setup and demo instructions are easy to follow.
+
+
+Day 29 - July 18, 2026
+
+Prompt to give Codex:
+"Create final demo script and seed data so I can demonstrate normal traffic, bad deployment, incident creation, service graph, runbook retrieval, and AI triage."
+
+Goal/output:
+- Demo is repeatable.
+- Seed data supports a polished story.
+- You can show the whole product without manual setup confusion.
+
+
+Day 30 - July 19, 2026
+
+Prompt to give Codex:
+"Do final QA: run tests, run build, run simulator, fix bugs, clean code, remove unused files, and prepare final resume bullets."
+
+Goal/output:
+- Bugs are fixed.
+- Tests and builds pass.
+- Repo is cleaned up.
+- Resume bullets are ready.
+
+
+Day 31 - July 20, 2026
+
+Prompt to give Codex:
+"Finalize SignalForge for submission: verify the full demo, update final documentation, summarize architecture and metrics, and give me an interview explanation from scratch."
+
+Goal/output:
+- Full demo is verified.
+- Documentation is final.
+- Architecture summary and performance metrics are ready.
+- Interview explanation is polished from beginner level to FAANG-level depth.
+
+
+Completion Checklist
+
+By July 20, SignalForge should include:
+
+- FastAPI backend with clean API structure.
+- Telemetry ingestion for metrics, logs, traces, and deployment events.
+- Event IDs and duplicate-event protection.
+- PostgreSQL durable storage.
+- Redis rolling windows.
+- Anomaly detection for error rate and latency.
+- Incident creation, status updates, evidence, and timelines.
+- Realistic traffic simulator.
+- React dashboard.
+- Service dependency graph.
+- Deployment correlation.
+- Runbook storage and search.
+- pgvector semantic search.
+- Rule-based root-cause ranking.
+- AI triage interface with mock fallback.
+- WebSocket live updates.
+- Kafka or Redpanda event pipeline.
+- Tests and load testing.
+- Production hardening.
+- Docker-based local deployment.
+- Strong README and final demo script.
+- Resume bullets and interview explanation.
+
+
+How To Use This File
+
+Every day:
+
+1. Copy that day's prompt exactly.
+2. Send it to me.
+3. Let me implement, test, and explain that day's work.
+4. Save any notes or questions from that day.
+
+Important:
+Do not skip directly to AI features. The strength of this project is that it first becomes a real backend/distributed-systems project. AI is added later as a grounded triage layer.
+

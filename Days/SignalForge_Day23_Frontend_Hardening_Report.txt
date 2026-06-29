@@ -1,0 +1,101 @@
+SignalForge — Day 23 Report
+Frontend Build Verification, TypeScript Fixes, and API Error States
+
+What was built today
+--------------------
+Hardened the frontend dashboard to build reliably, surface clear error messages
+when API calls fail, and fix latent TypeScript issues.
+
+Modified files
+- frontend/src/api.ts
+  Refactored all API functions to use a new `apiFetch<T>` helper that wraps
+  `fetch` with consistent error handling. Added `ApiError` class with:
+    - `endpoint`: which API path failed
+    - `status`: HTTP status code (0 = network error)
+    - `userMessage()`: human-readable error string that distinguishes:
+      - Network failures → "Cannot reach the backend. Is the server running...?"
+      - 5xx errors → "Server error on /path. Try again in a moment."
+      - 404 → "Not found: /path."
+      - 422 → "Invalid request to /path. Check your input."
+      - Everything else → "Request to /path failed (status)."
+
+- frontend/src/App.tsx
+  - Added `isLoading` and `error` states to graph, runbooks, and search queries
+    (previously only incidents had error handling).
+  - Added `ErrorState` component with a `message` prop so each tab shows a
+    specific, user-facing error message instead of a generic "Could not load
+    incidents".
+  - Added `handleRetryGraph`, `handleRetryRunbooks`, `handleRetrySearch`
+    handlers so retry buttons invalidate the correct query key.
+  - Graph tab now shows a spinner while loading, an error card on failure, or
+    the ServiceGraphView when data is available. Empty graph (no trace events
+    yet) shows the existing "No service graph data yet" message instead of
+    "Loading service graph...".
+  - Runbooks tab now shows a spinner while loading and an error card on failure.
+  - Search tab now shows an error card above the results when the search fails.
+  - Fixed WebSocket `msg` type from implicit `any` to a typed interface:
+    `{ type?: string; incident?: { id?: string } }`. This removes the implicit
+    any warning under strict TypeScript.
+
+- frontend/package.json
+  Added `build-check` script: `tsc --noEmit && vite build --mode production
+  --emptyOutDir`. This is the single command to verify the frontend compiles
+  and bundles correctly.
+
+- README.md
+  - Added "Frontend build verification" section with the `npm run build-check`
+    command.
+  - Updated "What makes this production-ready" to include:
+    - Frontend reliability (TypeScript strict, build verification, error states)
+    - API error handling (ApiError with user-friendly messages)
+
+- PROJECT_STATE.md
+  - Updated frontend file descriptions for Day 23.
+  - Added `frontend/package.json` entry.
+  - Updated timeline: Day 23 marked complete.
+  - Added interview talking point about frontend error handling.
+
+Build verification
+------------------
+`npm run build-check` verified:
+- TypeScript compilation: OK (no errors, no warnings)
+- Vite production build: OK (205 KB JS + 18 KB CSS, gzip: 63 KB + 3.9 KB)
+
+Backend tests
+-----------
+All 53 tests pass (0.98s). No regressions from frontend-only changes.
+
+What was fixed
+--------------
+- **Graph tab misleading loading state:** Before, `!graphData` showed
+  "Loading service graph..." even when the graph was actually empty (no trace
+  events ingested yet). After, the tab distinguishes between loading (spinner),
+  error (retry card), and empty ("No service graph data yet").
+- **Missing error states:** Graph, runbooks, and search tabs had no error
+  handling. If the backend was down, these tabs would show blank or partially
+  broken UI. After, every tab shows a clear error card with a retry button.
+- **Generic API errors:** Before, every API failure threw "Failed to fetch X".
+  After, errors include the endpoint path and status code, so the user knows
+  whether it's a network issue, a server crash, or a bad request.
+- **Implicit any in WebSocket handler:** The `msg` from `JSON.parse(event.data)`
+  had no type annotation. After, it uses a typed interface with optional fields.
+
+Interview talking points
+------------------------
+- Why `ApiError` with `userMessage()`? "In production, raw HTTP errors confuse
+  users. I wrap every fetch call in a helper that converts status codes into
+  actionable messages. The UI shows 'Cannot reach the backend' for network
+  errors and 'Server error, try again' for 5xx — the user knows what to do."
+- Why `build-check`? "TypeScript strict mode catches bugs before runtime. The
+  build-check script runs type-checking and a production bundle in one command.
+  In CI, this would gate deployments."
+- Why error states for every tab? "TanStack Query handles caching and
+  refetching, but I still need to render error UI. Each tab now has its own
+  loading, error, and empty states so the user never sees a broken screen."
+
+Next steps
+----------
+- Day 24: Load tests with Locust; chaos engineering (random service failures).
+- Day 25: README rewrite, architecture decision records (ADRs).
+- Day 26: Structured logging, trace ID propagation, CORS review.
+- Day 27: Build pipeline, Docker Compose for full stack.

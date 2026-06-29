@@ -1,0 +1,153 @@
+SignalForge Day 12 Service Graph Report
+Date: July 1, 2026
+
+Day 12 goal:
+Add service graph support from trace events, including backend endpoint and frontend visualization of service dependencies.
+
+
+1. What Changed
+
+Before Day 12:
+- Trace events with name="service_call" were ingested and stored, but never analyzed.
+- No way to see which service calls which.
+- The dashboard only showed incident cards, with no topology context.
+- When checkout-service failed, there was no visual indication it depends on notification-service.
+
+After Day 12:
+- Backend exposes GET /graph that returns nodes (services) and edges (caller -> callee) extracted from trace events.
+- Frontend dashboard has a tab toggle: "Incidents" and "Service Graph".
+- The Service Graph view renders an SVG topology diagram with services in a circle and curved arrows showing call dependencies.
+- Edge thickness scales with call count. Edge labels show count when > 1.
+- The graph updates every 5 seconds via react-query polling.
+
+New files:
+- signalforge_mvp/backend/app/routers/graph.py
+- signalforge_mvp/frontend/src/components/ServiceGraph.tsx
+
+Updated files:
+- signalforge_mvp/backend/app/schemas.py (added ServiceGraphNode, ServiceGraphEdge, ServiceGraphResponse)
+- signalforge_mvp/backend/app/storage.py (added get_service_graph())
+- signalforge_mvp/backend/app/main.py (included graph router)
+- signalforge_mvp/frontend/src/types.ts (added service graph types)
+- signalforge_mvp/frontend/src/api.ts (added fetchServiceGraph)
+- signalforge_mvp/frontend/src/App.tsx (tab navigation + ServiceGraph integration)
+- signalforge_mvp/frontend/src/App.css (tab nav + graph SVG styles)
+- signalforge_mvp/README.md (added GET /graph docs)
+- signalforge_mvp/PROJECT_STATE.md (Day 12 architecture decision + file list)
+
+
+2. Backend: GET /graph Endpoint
+
+File: signalforge_mvp/backend/app/routers/graph.py
+
+The endpoint:
+- Calls store.get_service_graph()
+- Returns ServiceGraphResponse with nodes and edges
+- No query parameters required
+
+File: signalforge_mvp/backend/app/storage.py
+
+The get_service_graph() method:
+- Queries telemetry_events where event_type="trace" AND name="service_call"
+- For each row, extracts attributes.caller and attributes.callee
+- Builds a set of unique node IDs (all services)
+- Builds edge_counts dictionary keyed by (source, target) tuple
+- Returns ServiceGraphResponse with sorted nodes and edges
+
+Why this approach:
+- The simulator already emits trace events with caller/callee (Day 6).
+- No schema migration needed — we query existing data.
+- Aggregation happens at query time, so the graph reflects all historical traces.
+- If a service has no trace events, it won't appear in the graph (until it emits one).
+
+
+3. Frontend: Service Graph Visualization
+
+File: signalforge_mvp/frontend/src/components/ServiceGraph.tsx
+
+The component:
+- Receives nodes and edges as props
+- Arranges nodes in a circular layout using trigonometry
+- Renders SVG with:
+  - <circle> for each service node (r=32, blue border, light fill)
+  - <text> for service name labels centered in each node
+  - <path> for edges with quadratic Bezier curves (curved arrows)
+  - <marker> for arrowheads at end of each path
+  - <text> for edge count labels at curve midpoint
+- Edge stroke width scales with call count (min 1px, max 4px)
+- Returns empty state when no nodes exist
+
+File: signalforge_mvp/frontend/src/App.tsx
+
+Changes:
+- Added activeTab state: "incidents" | "graph"
+- Added tab navigation bar with two buttons
+- Incidents tab: existing incident grid and detail panel
+- Graph tab: ServiceGraphView component with data from fetchServiceGraph
+- Graph query uses refetchInterval: 5000 (5 seconds)
+- Graph query only runs when graph tab is active (enabled flag)
+
+Why this approach:
+- Circular layout is deterministic and easy to understand.
+- No external graph library needed — pure SVG.
+- Tab navigation keeps the UI clean and focused.
+- Conditional query fetching avoids unnecessary API calls when the user is on the incidents tab.
+
+
+4. API Response Shape
+
+GET /graph returns:
+
+{
+  "nodes": [
+    { "id": "checkout-service", "label": "checkout-service" },
+    { "id": "fraud-service", "label": "fraud-service" },
+    { "id": "inventory-service", "label": "inventory-service" },
+    { "id": "notification-service", "label": "notification-service" },
+    { "id": "payment-service", "label": "payment-service" }
+  ],
+  "edges": [
+    { "source": "checkout-service", "target": "inventory-service", "label": "calls", "count": 15 },
+    { "source": "checkout-service", "target": "notification-service", "label": "calls", "count": 18 },
+    { "source": "checkout-service", "target": "payment-service", "label": "calls", "count": 16 },
+    { "source": "payment-service", "target": "fraud-service", "label": "calls", "count": 12 }
+  ]
+}
+
+
+5. Smoke Test Result
+
+Test setup:
+1. Started backend with PostgreSQL (DATABASE_URL set).
+2. Ran simulator for ~60 events to generate trace data.
+3. Opened frontend at http://localhost:5173.
+4. Clicked "Service Graph" tab.
+
+Observed:
+- Graph showed 5 nodes arranged in a circle.
+- Edges: checkout-service -> payment-service, checkout-service -> inventory-service, checkout-service -> notification-service, payment-service -> fraud-service.
+- Edge counts increased as simulator ran more events.
+- Switching back to Incidents tab showed all incidents normally.
+- No console errors.
+
+
+6. Beginner-Friendly Explanation Of What Happened
+
+When you have a microservice system, services call each other. For example, checkout-service calls payment-service to charge a customer. The simulator already records these calls as "trace events" with caller and callee fields. Before Day 12, these events were stored but never visualized.
+
+Day 12 adds a way to see the big picture: which services talk to which. The backend queries all trace events, counts how many times each pair of services called each other, and returns a graph structure. The frontend draws this as a circle of services with arrows between them.
+
+Why this matters: When notification-service fails, the graph immediately shows that checkout-service depends on it. This is root-cause analysis without reading log files — the topology makes the dependency visible.
+
+
+7. What Day 12 Proves
+
+Day 12 proves that SignalForge can:
+
+1. Extract meaningful topology from existing telemetry data.
+2. Aggregate trace events into a directed graph without schema changes.
+3. Render the graph in the frontend with pure SVG (no heavy dependencies).
+4. Switch between incident view and topology view in the same dashboard.
+5. Poll for graph updates without impacting the incidents view.
+
+This is a building block for future features: highlighting failing services in the graph, coloring edges by error rate, or showing latency heatmaps on the topology.

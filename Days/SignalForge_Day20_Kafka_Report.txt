@@ -1,0 +1,136 @@
+SignalForge Day 20 — Kafka Event-Driven Telemetry Ingestion Report
+Date: July 9, 2026
+
+Day 20 goal:
+Add Kafka or Redpanda to the architecture for telemetry ingestion, with topics, producer, consumer worker, retries, and dead-letter handling.
+
+1. What Changed
+
+Backend:
+- backend/requirements.txt — Added `kafka-python>=2.0,<3.0` dependency.
+- backend/app/kafka_client.py — New `KafkaClient` class:
+  - `KafkaProducer`: Publishes events to the `telemetry_events` topic with JSON serialization, `acks="all"`, 3 retries, 1-second backoff.
+  - `create_consumer()`: Returns a `KafkaConsumer` for the `telemetry_events` topic with consumer group `signforge-consumer`, `auto_offset_reset="earliest"`, `enable_auto_commit=True`.
+  - `publish_to_dead_letter()`: Sends failed events to the `telemetry_events_dead_letter` topic with failure reason and timestamp.
+  - Gracefully reports unavailable if Kafka brokers are not reachable.
+- backend/app/services/kafka_consumer_worker.py — New background consumer worker:
+  - `run_consumer_worker()`: Runs in a daemon thread, consumes from `telemetry_events` topic.
+  - `_consume_with_retries()`: Processes each event with up to 3 retries and exponential backoff (1s, 2s, 4s).
+  - If all retries fail, the event is sent to the dead-letter topic and logged.
+  - `_process_event()`: Validates the event as a `TelemetryEvent` and calls `ingest_telemetry_event()` (store in DB, anomaly detection, incident creation, WebSocket broadcast).
+  - `start_consumer_worker()`: Starts the consumer in a background thread at app startup.
+- backend/app/routers/ingest.py — Updated to be event-driven:
+  - When Kafka is available, publishes the event to `telemetry_events` and returns immediately with `mode="kafka"`.
+  - When Kafka is unavailable, falls back to synchronous processing with `mode="sync"`.
+  - The `IngestResponse` now includes a `mode` field ("kafka" | "sync").
+- backend/app/schemas.py — Added `mode: str = "sync"` to `IngestResponse` model.
+- backend/app/services/telemetry_service.py — Updated `ingest_telemetry_event` to include `mode="sync"` in responses.
+- backend/app/routers/health.py — Updated health check to report Kafka and Redis availability:
+  - `GET /health` now returns: `{"status": "ok", "kafka": "available"|"unavailable", "redis": "available"|"unavailable"}`
+- backend/app/main.py — Starts the Kafka consumer worker on app startup via `start_consumer_worker()`.
+
+Git commits:
+- add kafka event-driven telemetry ingestion with retries and dead-letter handling
+
+2. Current behavior / architecture details
+
+Event-driven ingestion flow:
+1. Simulator or client sends `POST /ingest` with a telemetry event.
+2. If Kafka is available: the API serializes the event to JSON and publishes it to the `telemetry_events` topic. Returns `accepted: true, mode: "kafka"` immediately.
+3. The Kafka consumer worker (background thread) consumes the event from the topic.
+4. The worker processes the event: stores in DB, runs anomaly detection, creates incident if needed, broadcasts via WebSocket.
+5. If processing fails, the worker retries up to 3 times with exponential backoff (1s, 2s, 4s).
+6. If all retries fail, the event is sent to the `telemetry_events_dead_letter` topic and logged.
+7. If Kafka is unavailable: the API falls back to synchronous processing (same as Days 1-19).
+
+Fallback behavior:
+- Kafka unavailable: `ingest_telemetry_event` is called synchronously, same behavior as before.
+- Redis unavailable: anomaly detection reads from DB instead of Redis (Day 11 behavior).
+- Both unavailable: the system still works, just without streaming and hot rolling windows.
+
+3. Smoke Test Result
+
+- Backend imports: OK (from app.main import app succeeds)
+- All 14 tests pass (8 anomaly + 6 incident)
+- Kafka client gracefully reports unavailable when no brokers are running
+- Consumer worker does not start when Kafka is unavailable (no errors)
+- Ingest endpoint falls back to synchronous processing when Kafka is unavailable
+- Health endpoint correctly reports Kafka and Redis status
+- No schema migration needed (Kafka topics are created dynamically)
+
+4. How To Analyze It Yourself
+
+Start Kafka (or Redpanda) with Docker:
+  docker run -d --name redpanda \
+    -p 9092:9092 \
+    docker.redpanda.com/vectorized/redpanda:latest \
+    redpanda start --overprovisioned --smp 1 --memory 1G --reserve-memory 0M \
+    --node-id 0 --check=false
+
+Start the backend:
+  cd "C:\Users\dharm\OneDrive\文档\Worthy One\signalforge_mvp\backend"
+  .\.venv\Scripts\activate
+  $env:DATABASE_URL="postgresql+psycopg2://signforge:signforge@localhost:5432/signforge"
+  $env:REDIS_URL="redis://localhost:6379/0"
+  $env:KAFKA_BROKERS="localhost:9092"
+  uvicorn app.main:app --reload
+
+Check health status:
+  curl "http://127.0.0.1:8000/health"
+  # Expected: {"status": "ok", "kafka": "available", "redis": "unavailable"}
+
+Test event-driven ingestion:
+  # Send a telemetry event
+  curl -X POST "http://127.0.0.1:8000/ingest" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "tenant_id": "demo",
+      "service_name": "payment-service",
+      "event_type": "metric",
+      "timestamp": "2026-07-09T12:00:00Z",
+      "name": "http_request",
+      "value": 1.0,
+      "attributes": {"status_code": 500, "latency_ms": 2000}
+    }'
+  # Expected: {"accepted": true, "event_id": "...", "duplicate": false, "mode": "kafka"}
+
+Check dead-letter topic (if events failed):
+  # Use kafka-console-consumer or kcat
+  kcat -b localhost:9092 -t telemetry_events_dead_letter -C
+
+5. Beginner-Friendly Explanation
+
+Before Day 20, when you sent a telemetry event to the API, it was processed immediately and stored in the database. This is called synchronous processing. It works but has a problem: if the API is getting lots of events, it can get overwhelmed because every event is processed right away.
+
+Kafka is a message queue (a "message broker"). Instead of processing the event immediately, the API puts it in a queue (called a "topic") and says "someone else will process this later." Then a separate worker reads from the queue and processes the events one by one.
+
+This is like the difference between a restaurant where the chef cooks each order as soon as it's placed (synchronous) vs one where orders are written on a ticket and the chef works through them in order (event-driven). The second approach is more scalable.
+
+Here's the flow:
+1. You send an event to the API.
+2. The API puts it in the Kafka queue (topic: `telemetry_events`).
+3. The API immediately returns "accepted" to you.
+4. A background worker reads from the queue.
+5. The worker stores the event, checks for anomalies, creates incidents if needed.
+6. If the worker fails to process an event, it tries again (up to 3 times, waiting longer each time).
+7. If it still fails after 3 tries, the event goes to a "dead letter" queue where someone can investigate later.
+
+If Kafka is not running, the API falls back to the old synchronous behavior. So the system works either way.
+
+6. Completion Checklist
+
+| Requirement | Status |
+|-------------|--------|
+| Kafka/Redpanda added to requirements | ✅ |
+| Kafka producer publishes telemetry events | ✅ |
+| Kafka consumer worker processes events | ✅ |
+| Consumer runs in background thread | ✅ |
+| Retry logic with exponential backoff (3 retries) | ✅ |
+| Dead-letter topic for failed events | ✅ |
+| Ingest endpoint publishes to Kafka when available | ✅ |
+| Ingest endpoint falls back to synchronous processing | ✅ |
+| Health check reports Kafka and Redis status | ✅ |
+| Consumer worker starts on app startup | ✅ |
+| Graceful degradation when Kafka unavailable | ✅ |
+| Tests pass | ✅ |
+| Backend imports cleanly | ✅ |

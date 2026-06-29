@@ -1,0 +1,58 @@
+{
+  "timestamp": "2026-06-27T18:01:48.575296+00:00",
+  "api_latency_ms": {
+    "GET /health": {
+      "avg_ms": 13.54,
+      "p50_ms": 15.56,
+      "p95_ms": 24.94
+    },
+    "GET /incidents": {
+      "avg_ms": 17.06,
+      "p50_ms": 15.65,
+      "p95_ms": 27.04
+    },
+    "GET /events": {
+      "avg_ms": 14.01,
+      "p50_ms": 15.33,
+      "p95_ms": 25.09
+    },
+    "GET /graph": {
+      "avg_ms": 14.03,
+      "p50_ms": 15.64,
+      "p95_ms": 16.43
+    },
+    "GET /search?q=checkout": {
+      "avg_ms": 17.28,
+      "p50_ms": 15.82,
+      "p95_ms": 28.19
+    },
+    "GET /runbooks": {
+      "avg_ms": 15.39,
+      "p50_ms": 15.56,
+      "p95_ms": 16.0
+    }
+  },
+  "ingest_throughput_10s": {
+    "rps": 47.7,
+    "avg_ms": 155.09,
+    "p50_ms": 131.84,
+    "p95_ms": 379.72,
+    "p99_ms": 521.51,
+    "errors": 0,
+    "total": 480
+  },
+  "incident_detection_delay_ms": {
+    "detected": true,
+    "delay_ms": 784.03,
+    "events_to_trigger": 20
+  },
+  "concurrent_ingest_1000": {
+    "rps": 74.8,
+    "avg_ms": 620.49,
+    "p50_ms": 501.94,
+    "p95_ms": 1320.07,
+    "p99_ms": 3360.76,
+    "errors": 4,
+    "total": 996
+  }
+}

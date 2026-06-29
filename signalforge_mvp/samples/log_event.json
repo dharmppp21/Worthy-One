@@ -1,0 +1,16 @@
+{
+  "event_id": "sample-log-payment-001",
+  "tenant_id": "demo-company",
+  "service_name": "payment-service",
+  "event_type": "log",
+  "timestamp": "2026-06-22T10:00:01Z",
+  "name": "application_log",
+  "trace_id": "trace-sample-001",
+  "severity": "error",
+  "message": "payment-service timed out while calling fraud-service",
+  "attributes": {
+    "logger": "payment-service",
+    "error_code": "FRAUD_TIMEOUT"
+  }
+}
+

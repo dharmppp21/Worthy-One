@@ -1,0 +1,167 @@
+SignalForge Day 6 Traffic Simulator Report
+Date: June 25, 2026
+
+Day 6 goal:
+Enhance the traffic simulator to simulate checkout, payment, inventory, fraud, and notification services with normal traffic, bad deploys, timeouts, logs, metrics, and trace IDs.
+
+
+1. What Changed
+
+The simulator was upgraded from a simple 3-service script to a realistic 5-service microservice e-commerce scenario with a cascading failure story.
+
+Updated file:
+
+signalforge_mvp/simulator/traffic_simulator.py
+
+
+2. Services in the Simulator
+
+Five services now participate:
+
+- checkout-service: Handles checkout flow. Depends on payment, inventory, and notification.
+- payment-service: Processes payments. Depends on fraud-service for validation.
+- inventory-service: Reserves stock. Independent, stays healthy.
+- fraud-service: Validates transactions. Independent, stays healthy.
+- notification-service: Sends confirmation emails. Independent, becomes the root cause.
+
+
+3. Service Dependency Graph
+
+checkout-service
+  -> payment-service
+  -> inventory-service
+  -> notification-service
+
+payment-service
+  -> fraud-service
+
+This trace relationship produces service_call trace events that will be used for the service graph feature on Day 12.
+
+
+4. Three-Phase Scenario
+
+Phase 1: Normal traffic (events 0 to 49)
+- All 5 services receive healthy traffic.
+- Low latency (80-250 ms).
+- 2% random errors.
+- Trace events show service dependencies.
+- Log events only on errors.
+
+Phase 2: Bad deployment (event 50)
+- Deployment event: notification-service v42.
+- This marks the start of the incident story.
+
+Phase 3: Cascading failure (events 50+)
+- notification-service: 40% error rate, 2000-4500 ms latency (timeouts).
+- checkout-service: 30% error rate, 400-3000 ms latency. Fails because it depends on notification.
+- payment-service: 10% error rate, 300-800 ms latency. Slightly degraded.
+- inventory-service and fraud-service: Stay mostly healthy with normal latency.
+
+
+5. Event Types Produced
+
+Metric events (http_request):
+- Every request creates a metric event with status_code, latency_ms, and endpoint.
+- Endpoints are realistic: /api/checkout, /api/charge, /api/reserve, /api/validate, /api/notify.
+
+Log events (application_log):
+- Error logs on 500 responses.
+- Warning logs on requests exceeding 1500 ms (timeout alerts).
+
+Trace events (service_call):
+- Emitted when a service calls a dependency.
+- Includes caller, callee, status_code, and latency_ms.
+
+Deployment events (service_deployed):
+- Emitted at the start of the bad deployment phase.
+
+
+6. Why This Story Is Better for Interviews
+
+Before Day 6, the demo was: "payment-service has a bad deploy and fails."
+
+After Day 6, the demo is: "notification-service v42 was deployed. It started timing out. checkout-service, which depends on notification, began failing. The incident system detected both the root cause (notification) and the cascading effect (checkout)."
+
+This is a real-world microservice failure pattern that interviewers will recognize and appreciate.
+
+
+7. How to Run It
+
+Terminal 1: Backend
+
+cd "C:\Users\dharm\OneDrive\文档\Worthy One\signalforge_mvp\backend"
+.\.venv\Scripts\activate
+$env:PYTHONUTF8='1'
+uvicorn app.main:app --reload
+
+Terminal 2: Simulator
+
+cd "C:\Users\dharm\OneDrive\文档\Worthy One\signalforge_mvp\simulator"
+.\.venv\Scripts\activate
+$env:PYTHONUTF8='1'
+python traffic_simulator.py
+
+Browser checks:
+
+http://127.0.0.1:8000/events
+http://127.0.0.1:8000/incidents
+
+
+8. What to Look For in the Events
+
+Metric events:
+- service_name: "notification-service", status_code: 500, latency_ms: 3000+
+- service_name: "checkout-service", status_code: 500, latency_ms: 2000+
+
+Log events:
+- severity: "error", message: "notification-service returned status 500 from /api/notify"
+- severity: "warning", message: "notification-service request to /api/notify timed out after 2500ms"
+
+Trace events:
+- name: "service_call", caller: "checkout-service", callee: "notification-service"
+- name: "service_call", caller: "payment-service", callee: "fraud-service"
+
+Deployment events:
+- name: "service_deployed", service_name: "notification-service", version: "v42"
+
+
+9. Beginner-Friendly Explanation
+
+Imagine you run an online store. The store has 5 backend services that talk to each other.
+
+Normally:
+- A customer clicks Buy.
+- checkout-service charges the card through payment-service.
+- payment-service checks fraud through fraud-service.
+- inventory-service reserves the item.
+- notification-service sends a confirmation email.
+- Everything works. Latency is low. Almost no errors.
+
+After the bad deploy:
+- Someone deploys notification-service v42.
+- notification-service starts timing out. Emails take 4 seconds or fail.
+- checkout-service, which waits for the email confirmation, also starts failing.
+- payment-service is slightly slower but mostly works.
+- inventory and fraud services stay fine.
+
+SignalForge sees all of this through the events sent by the simulator. It stores the events, checks the last 20 requests for each failing service, and creates incidents when thresholds are crossed.
+
+
+10. Day 6 Completion Checklist
+
+Completed:
+
+- 5 services simulated: checkout, payment, inventory, fraud, notification.
+- Service dependency graph with trace events (caller -> callee).
+- Realistic endpoints per service.
+- Normal traffic phase with healthy requests and low latency.
+- Bad deployment phase with deployment event.
+- Cascading failure phase: notification-service fails, checkout-service fails as a result.
+- Timeout simulation via high latency values.
+- Error logs on 500 responses.
+- Warning logs on high-latency timeouts.
+- Trace events for every service dependency call.
+- Slightly degraded payment-service for realism.
+- inventory and fraud stay healthy as a control group.
+- Simulator syntax verified and compiles cleanly.
+- README updated with simulator phases and what to look for.

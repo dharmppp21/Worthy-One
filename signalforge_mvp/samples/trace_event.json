@@ -1,0 +1,15 @@
+{
+  "event_id": "sample-trace-checkout-payment-001",
+  "tenant_id": "demo-company",
+  "service_name": "checkout-service",
+  "event_type": "trace",
+  "timestamp": "2026-06-22T10:00:02Z",
+  "name": "service_call",
+  "trace_id": "trace-sample-001",
+  "attributes": {
+    "caller": "checkout-service",
+    "callee": "payment-service",
+    "latency_ms": 180
+  }
+}
+

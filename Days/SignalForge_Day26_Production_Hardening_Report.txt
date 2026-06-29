@@ -1,0 +1,169 @@
+SignalForge — Day 26 Report
+Production Hardening: Logging, Rate Limiting, Error Handling, Config, Health Checks
+
+What was built today
+--------------------
+Added production hardening to make the backend behave like a real service:
+centralized configuration, structured logging, rate limiting, safe error handling,
+request tracing, and enhanced health checks.
+
+New files
+- backend/app/config.py
+  Centralized `Config` class that reads all environment variables in one place:
+  DATABASE_URL, REDIS_URL, KAFKA_BROKERS, OPENAI_API_KEY, ENVIRONMENT, LOG_LEVEL,
+  RATE_LIMIT_RPS, RATE_LIMIT_WINDOW_SECONDS. No other module calls os.environ.get()
+  directly. `is_production()` and `is_development()` helper methods.
+
+- backend/app/logging_config.py
+  Structured logging with `StructuredFormatter` that outputs key=value pairs:
+  `timestamp=2026-07-15T10:00:00Z level=INFO logger=app.routers.ingest message=...`.
+  Supports JSON-safe extra fields (event_id, tenant_id, request_id, endpoint,
+  status_code, duration_ms). Suppresses noisy third-party logs (kafka, sqlalchemy,
+  uvicorn.access) in production. `get_logger(name)` factory.
+
+- backend/app/middleware/error_handler.py
+  Global exception handlers registered on the FastAPI app:
+  - HTTPException: passes through the status code and detail
+  - RequestValidationError: in development shows sanitized error details; in
+    production returns generic "Invalid request" message (no Pydantic internals leaked)
+  - Generic Exception: in development shows exception type and message; in
+    production returns "An unexpected error occurred. Please try again later."
+    Never leaks stack traces to clients. Logs full exception server-side with
+    request_id, path, and method for tracing.
+
+- backend/app/middleware/request_logging.py
+  `RequestLoggingMiddleware` (BaseHTTPMiddleware): logs every request with
+  method, path, status_code, duration_ms, client_ip, and a generated request_id.
+  Sets `X-Request-Id` response header for client-side tracing.
+
+- backend/app/middleware/rate_limit.py
+  In-memory sliding-window rate limiter (default 100 RPS per IP). Tracks
+  requests per client IP in a defaultdict of lists. Cleans old entries on each
+  check. Returns 429 Too Many Requests with "Rate limit exceeded" message when
+  limit is hit. `reset()` method for testing.
+
+- backend/app/middleware/__init__.py
+  Package marker for the middleware directory.
+
+Modified files
+- backend/app/main.py
+  - Imports `configure_logging()` and calls it at module load (before anything else)
+  - Adds `RequestLoggingMiddleware` to the app middleware stack
+  - Calls `register_exception_handlers(app)` for safe error handling
+  - Hides `/docs` and `/redoc` in production (`docs_url=None` when not development)
+  - CORS origins restricted to localhost in development, empty in production
+
+- backend/app/routers/health.py
+  - Added database connectivity check: `engine.connect()` + `text("SELECT 1")`
+  - Added `environment` field to response
+  - Restructured response to `dependencies` object with `database`, `redis`, `kafka`
+  - Overall status: "ok" if DB is up, "degraded" if DB is down
+
+- backend/app/routers/ingest.py
+  - Added `dependencies=[Depends(rate_limit_dependency)]` to POST /ingest
+  - Added structured logging: info on ingest, info on Kafka publish, warning on
+    Kafka fallback, info on sync processing completion
+  - All log lines include event_id, tenant_id, service_name for tracing
+
+- backend/app/database.py
+  - Removed `import os` and `os.environ.get()` call
+  - Imports `config` from `app.config`, uses `config.DATABASE_URL`
+
+- backend/app/redis_client.py
+  - Removed `import os` and `os.environ.get()` call
+  - Uses `config.REDIS_URL`
+
+- backend/app/kafka_client.py
+  - Removed `import os` and `os.environ.get()` call
+  - Uses `config.KAFKA_BROKERS`
+
+- backend/app/embeddings.py
+  - Removed `import os` and `os.getenv()` call
+  - Uses `config.OPENAI_API_KEY`
+
+- backend/tests/conftest.py
+  - Added `reset_rate_limiter()` call in `reset_store` fixture to isolate tests
+    from rate limiter state
+
+- backend/tests/test_integration_search.py
+  - Updated `test_health_returns_ok` to check new response structure:
+    `data["dependencies"]["database"]`, `data["dependencies"]["kafka"]`,
+    `data["dependencies"]["redis"]` and `data["environment"]`
+
+- backend/.env.example
+  - Already had LOG_LEVEL and ENVIRONMENT; no changes needed (config reads them)
+
+Bug fix during testing
+----------------------
+Validation error handler initially returned `exc.errors()` directly, which contains
+non-JSON-serializable `ValueError` objects in the `ctx` field. FastAPI's JSONResponse
+threw `TypeError: Object of type ValueError is not JSON serializable`. Fixed by
+adding a `_safe_error()` helper that extracts only `type`, `loc`, `msg`, and `input`
+fields as strings, dropping the problematic `ctx` dict.
+
+Tests
+-----
+All 57 tests pass (1.46s). No regressions from the production hardening changes.
+
+What the hardening proves
+-------------------------
+- **Configuration is centralized:** Every env var is read in one file. Adding a new
+  config is one-line change. No `os.environ.get()` scattered across the codebase.
+- **Logs are structured:** Every log line has timestamp, level, logger, message,
+  and optional extra fields. In production, you can grep/filter by `event_id` or
+  `request_id` to trace a single request through the system.
+- **Rate limiting works:** The ingest endpoint is protected from abuse. In tests, the
+  reset function ensures the limiter doesn't interfere. In production, 100 RPS per
+  IP is reasonable for a single backend instance; Redis-backed rate limiting would
+  be the next upgrade for multi-instance deployments.
+- **Errors are safe:** In production, a 500 error returns a generic message. The
+  full stack trace is logged server-side with request_id for tracing. In
+  development, the original error is shown for debugging.
+- **Health checks are deep:** Not just "the process is running" but "the database
+  is reachable, Redis is available, Kafka is connected." This is what load balancers
+  and orchestrators (Kubernetes, ECS) need to decide whether to route traffic to
+  an instance.
+
+Interview talking points
+------------------------
+- Why centralized config? "In production, you need to know exactly what environment
+  variables your app depends on. Scattered `os.environ.get()` calls are hard to
+  audit. One `Config` class makes it explicit and testable."
+- Why structured logging? "Plain text logs are hard to query. Key=value pairs or
+  JSON let you filter by `event_id=xyz` to trace a single request across
+  multiple services. In an interview, this shows I understand observability."
+- Why rate limiting? "The ingest endpoint is the most exposed. Without rate
+  limiting, a malicious client or a buggy simulator could DDoS the backend. 100
+  RPS per IP is a reasonable default. For multi-instance, I'd use Redis-backed
+  rate limiting so the limit is shared across all instances."
+- Why hide stack traces in production? "Security: stack traces reveal internal
+  code paths, dependencies, and sometimes secrets. You log them server-side with
+  request_id so you can still debug, but the client never sees them."
+- Why enhanced health checks? "A load balancer needs to know if an instance is
+  healthy. 'Process is running' is not enough. We check database connectivity,
+  Redis, and Kafka. If the DB is down, the instance returns 'degraded' and the
+  load balancer stops sending traffic."
+- Why request_id? "When a user reports an issue, you need to find the exact logs
+  for that request. `X-Request-Id` in the response header lets the user (or support)
+  give you a single string to grep across all logs."
+
+Resume bullets
+--------------
+- Implemented production hardening: centralized config (pydantic-style), structured
+  logging with request tracing, in-memory rate limiting (100 RPS per IP), safe
+  error handling (no stack traces in production), enhanced health checks with DB
+  connectivity, and request logging middleware
+- Migrated all scattered `os.environ.get()` calls to a single `Config` class,
+  making the application's environment dependencies explicit and auditable
+- Added `RequestLoggingMiddleware` that generates `X-Request-Id` headers and logs
+  every request with method, path, status code, duration, and client IP
+- Safe exception handlers: generic 500 errors return sanitized messages in
+  production while logging full stack traces server-side with request_id for tracing
+
+Next steps
+----------
+- Day 27: Build pipeline, Docker Compose for full stack (frontend + backend + simulator).
+- Day 28: Environment configs (staging vs production).
+- Day 29: Clean repository, .gitignore, remove dead code.
+- Day 30: One-page project overview, architecture diagram.
+- Day 31: Final demo script, dry run, polish.

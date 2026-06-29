@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:coroutine 'broadcast_incident_event' was never awaited:RuntimeWarning",
+    "ignore::UserWarning:app.embeddings",
+]

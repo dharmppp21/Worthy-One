@@ -1,0 +1,16 @@
+{
+  "event_id": "sample-metric-payment-001",
+  "tenant_id": "demo-company",
+  "service_name": "payment-service",
+  "event_type": "metric",
+  "timestamp": "2026-06-22T10:00:00Z",
+  "name": "http_request",
+  "trace_id": "trace-sample-001",
+  "value": 1,
+  "attributes": {
+    "status_code": 500,
+    "latency_ms": 1800,
+    "endpoint": "/charge"
+  }
+}
+

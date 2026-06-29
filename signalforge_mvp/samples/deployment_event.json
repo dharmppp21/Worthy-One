@@ -1,0 +1,14 @@
+{
+  "event_id": "sample-deployment-payment-v42",
+  "tenant_id": "demo-company",
+  "service_name": "payment-service",
+  "event_type": "deployment",
+  "timestamp": "2026-06-22T10:00:03Z",
+  "name": "service_deployed",
+  "attributes": {
+    "version": "v42",
+    "commit_sha": "abc123",
+    "deployed_by": "simulator"
+  }
+}
+

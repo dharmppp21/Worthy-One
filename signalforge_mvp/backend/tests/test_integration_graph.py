@@ -1,0 +1,87 @@
+from datetime import datetime, timezone
+
+
+class TestServiceGraph:
+    """End-to-end test: trace events build the service dependency graph."""
+
+    def test_empty_graph_has_no_nodes_or_edges(self, client, reset_store):
+        resp = client.get("/graph")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["nodes"] == []
+        assert data["edges"] == []
+
+    def test_single_trace_creates_nodes_and_edge(self, client, reset_store):
+        payload = {
+            "event_id": "graph-trace-001",
+            "tenant_id": "demo-company",
+            "service_name": "checkout-service",
+            "event_type": "trace",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "name": "service_call",
+            "trace_id": "trace-001",
+            "attributes": {"caller": "checkout-service", "callee": "payment-service", "status": "success"},
+        }
+        assert client.post("/ingest", json=payload).status_code in (200, 202)
+
+        resp = client.get("/graph")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["nodes"]) == 2
+        node_ids = {n["id"] for n in data["nodes"]}
+        assert node_ids == {"checkout-service", "payment-service"}
+
+        assert len(data["edges"]) == 1
+        edge = data["edges"][0]
+        assert edge["source"] == "checkout-service"
+        assert edge["target"] == "payment-service"
+        assert edge["label"] == "calls"
+        assert edge["count"] == 1
+
+    def test_multiple_traces_aggregate_counts(self, client, reset_store):
+        """Multiple calls between the same pair should aggregate the count."""
+        for i in range(5):
+            payload = {
+                "event_id": f"graph-trace-{i:03d}",
+                "tenant_id": "demo-company",
+                "service_name": "checkout-service",
+                "event_type": "trace",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "name": "service_call",
+                "trace_id": f"trace-{i:03d}",
+                "attributes": {"caller": "checkout-service", "callee": "inventory-service", "status": "success"},
+            }
+            client.post("/ingest", json=payload)
+
+        data = client.get("/graph").json()
+        assert len(data["nodes"]) == 2
+        edges = [e for e in data["edges"] if e["source"] == "checkout-service" and e["target"] == "inventory-service"]
+        assert len(edges) == 1
+        assert edges[0]["count"] == 5
+
+    def test_different_callers_create_multiple_edges(self, client, reset_store):
+        """Different caller→callee pairs create separate edges."""
+        traces = [
+            ("checkout-service", "payment-service"),
+            ("checkout-service", "inventory-service"),
+            ("payment-service", "fraud-service"),
+        ]
+        for i, (caller, callee) in enumerate(traces):
+            payload = {
+                "event_id": f"graph-multi-{i:03d}",
+                "tenant_id": "demo-company",
+                "service_name": caller,
+                "event_type": "trace",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "name": "service_call",
+                "trace_id": f"trace-{i:03d}",
+                "attributes": {"caller": caller, "callee": callee, "status": "success"},
+            }
+            client.post("/ingest", json=payload)
+
+        data = client.get("/graph").json()
+        assert len(data["nodes"]) == 4
+        assert len(data["edges"]) == 3
+
+        edge_pairs = {(e["source"], e["target"]) for e in data["edges"]}
+        assert edge_pairs == set(traces)

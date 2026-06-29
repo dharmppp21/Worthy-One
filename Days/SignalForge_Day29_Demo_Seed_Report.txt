@@ -1,0 +1,103 @@
+SignalForge — Day 29 Report
+Demo Seed Data and Walkthrough Guide
+
+What was built today
+--------------------
+Created a deterministic demo seed script and a comprehensive walkthrough guide
+that tells a complete, repeatable story: healthy traffic → bad deployment →
+cascading failure → incident creation → structured evidence → root cause →
+runbook retrieval → AI triage. The demo runs in 5 minutes and requires no
+manual setup or waiting for events to process.
+
+New files
+- scripts/seed_demo.py
+  Deterministic seed script that creates a complete demo dataset directly via
+  the EventProcessor and storage layer:
+  - Phase 1: 20 healthy metric events across all 5 services (200ms, 200 OK)
+  - Phase 2: 1 deployment event for notification-service v2.1.0
+  - Phase 3: 20 bad metric events for notification-service (500, 2000-2500ms)
+  - Phase 4: 10 bad trace events showing checkout-service -> notification-service failures
+  - Phase 5: 10 bad metric events for checkout-service (500, 2200ms)
+  - Phase 6: 5 error log events ("connection pool exhausted")
+  - Phase 7: 2 runbooks (checkout-service and notification-service playbooks)
+  - Result: 50 events, 1 critical incident, 2 runbooks, 1 deployment
+
+  The script runs in ~2 seconds, prints a narrative summary, and shows the
+  incident timeline with deployment correlation evidence.
+
+- DEMO.md
+  8-step demo walkthrough with:
+  - Setup instructions (30 seconds: run seed script, start backend, open dashboard)
+  - The story narrative (notification-service v2.1.0 bug causes cascade)
+  - 8 numbered steps with exact API commands and expected responses:
+    1. Show healthy baseline (/events)
+    2. Show bad deployment (/deployments)
+    3. Show incident with evidence (/incidents)
+    4. Show service graph (/graph)
+    5. Show root cause analysis (/services/{name}/root-cause)
+    6. Show runbook retrieval (/runbooks)
+    7. Show AI triage (/incidents/{id}/ai-triage)
+    8. Show search (/search?q=notification)
+  - Talking points for each step (what to say in an interview)
+  - Closing statement (15-second summary)
+  - Commands cheat sheet
+  - Demo tips (run seed first, tell the story not the tech, mention the numbers)
+
+Modified files
+- README.md
+  - Added "Demo ready: See DEMO.md for a 5-minute walkthrough with seed data
+    and talking points" badge after the description paragraph
+- PROJECT_STATE.md
+  - Updated last updated date to Day 29 (July 18, 2026)
+  - Updated current phase to mention demo-ready status
+  - Updated timeline: Day 29 marked ✅ Done with description
+  - Added `DEMO.md` and `scripts/seed_demo.py` to Infrastructure & Docs file list
+
+What the demo proves
+--------------------
+- **Repeatability:** Run the seed script, start the backend, and the full story
+  is already there. No waiting, no randomness, no "let me see if it works this time."
+- **Completeness:** The demo covers every major feature: ingest, anomaly detection,
+  incident creation, deployment correlation, evidence timeline, service graph,
+  root cause scoring, runbook retrieval, AI triage, and search.
+- **Determinism:** The seed script uses the EventProcessor directly, so the same
+  events always produce the same incident with the same evidence. This is crucial
+  for a demo — you can't have a flaky story in an interview.
+- **Speed:** The entire demo story is created in ~2 seconds. The backend doesn't
+  need to be running during seeding. Then you start the backend and the data
+  is immediately available.
+- **Narrative flow:** The 8 steps build on each other: baseline → change →
+  failure → detection → dependency → cause → fix → AI analysis. Each step
+  answers the question the previous step raised.
+
+Interview talking points
+------------------------
+- "I built a deterministic demo seed script that creates a complete story in
+  2 seconds. This is important because in an interview, you can't have a flaky
+  demo. Every time I run it, I get the same critical incident with the same
+  deployment correlation and 95% error rate."
+- "The demo covers 8 steps: baseline, deployment, incident, graph, root cause,
+  runbook, AI triage, search. Each step answers the question raised by the
+  previous one. When you see checkout-service failing, the graph shows it depends
+  on notification-service. When you see the deployment, the root cause scores it
+  at 85/100. When you see the runbook, the first step is 'check deployment history.'"
+- "The seed script runs directly against the EventProcessor, not through the API.
+  This is a design choice: the demo is about showing the product, not the API.
+  The API is for production; the seed script is for repeatable demos."
+
+Resume bullets
+--------------
+- Built a deterministic demo seed script that creates a complete incident story
+  (50 events, 1 critical incident, 2 runbooks, 1 deployment) in 2 seconds via
+  the EventProcessor pipeline
+- Wrote DEMO.md, an 8-step demo walkthrough with exact API commands, expected
+  JSON responses, talking points per step, and a 15-second closing statement for
+  interviews
+- Designed the demo narrative to build progressively: baseline → deployment →
+  failure → detection → dependency graph → root cause (score 85/100) → runbook
+  → AI triage → search, each step answering the previous question
+
+Next steps
+----------
+- Day 30: One-page project overview, architecture diagram for quick reference
+- Day 31: Final polish, dry run, ensure all tests still pass after demo seeding

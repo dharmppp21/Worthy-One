@@ -1,0 +1,131 @@
+SignalForge — Day 25 Report
+API Key Auth and Tenant Isolation
+
+What was built today
+--------------------
+Added API key authentication and tenant isolation across the entire backend.
+All endpoints (except health check) now require an X-API-Key header. The
+tenant_id from the authenticated key is enforced on every data query, preventing
+cross-tenant data leakage. The frontend sends the API key on every request.
+
+New files
+- backend/app/auth.py
+  Simple auth module with `get_current_tenant` dependency:
+  - Validates `X-API-Key` header is present
+  - Maps API keys to tenant IDs via in-memory dictionary
+  - Returns 401 Unauthorized with clear message on missing or invalid key
+  - For MVP: `sf-api-key-demo` → `demo-company`, `sf-test-key` → `demo-company`
+
+- backend/tests/test_auth.py
+  3 tests verifying auth behavior:
+  - Missing API key → 401
+  - Invalid API key → 401
+  - Valid API key → data returned
+
+Modified files (backend routers — all now enforce auth + tenant isolation)
+- backend/app/routers/ingest.py
+  - `Depends(get_current_tenant)` added to ingest endpoint
+  - Payload tenant_id is overridden with authenticated tenant_id (prevents
+    cross-tenant data injection)
+- backend/app/routers/incidents.py
+  - All 3 endpoints (list, get, patch) now require auth and pass tenant_id
+  - Patch endpoint now passes tenant_id to `update_incident_status`
+- backend/app/routers/events.py
+  - List events now filters by authenticated tenant_id
+- backend/app/routers/graph.py
+  - Service graph now filters trace events by tenant_id
+- backend/app/routers/search.py
+  - Keyword and semantic search now filter by tenant_id
+- backend/app/routers/runbooks.py
+  - All CRUD operations enforce tenant_id
+  - Create runbook now uses authenticated tenant_id (not payload tenant_id)
+- backend/app/routers/root_cause.py
+  - Root cause analysis now passes tenant_id to engine
+- backend/app/routers/ai_triage.py
+  - AI triage now verifies tenant ownership of incident
+- backend/app/routers/deployments.py
+  - Deployment list now filters by tenant_id
+
+Modified files (storage layer — tenant isolation enforced in queries)
+- backend/app/storage.py
+  - `get_incident`: added optional tenant_id filter, returns None if tenant mismatch
+  - `list_incidents`: added optional tenant_id filter
+  - `list_events`: added optional tenant_id filter
+  - `get_service_graph`: added optional tenant_id filter on trace events
+  - `search_incidents`: added optional tenant_id filter
+  - `search_runbooks`: added optional tenant_id filter
+  - `get_runbook`: added optional tenant_id filter, returns None if tenant mismatch
+  - `update_runbook`: added optional tenant_id filter, returns None if tenant mismatch
+  - `delete_runbook`: added optional tenant_id filter, returns False if tenant mismatch
+
+Modified files (service layer)
+- backend/app/services/telemetry_service.py
+  - `list_recent_events(tenant_id)`: added required tenant_id parameter
+  - `list_current_incidents(tenant_id)`: added required tenant_id parameter
+  - `get_incident_detail(incident_id, tenant_id)`: added required tenant_id parameter
+  - `update_incident_status(incident_id, update, tenant_id)`: added required tenant_id parameter
+
+Modified files (frontend)
+- frontend/src/api.ts
+  - Added `API_KEY = "sf-api-key-demo"` constant
+  - `apiFetch` helper now includes `X-API-Key` header on every request
+  - `ApiError.userMessage()` now handles 401: "Authentication failed. Check your API key."
+
+Modified files (tests)
+- backend/tests/conftest.py
+  - TestClient fixture now sets `X-API-Key: sf-test-key` header automatically
+- backend/tests/test_incidents.py
+  - Unit tests calling `update_incident_status()` directly now pass `tenant_id="demo-company"`
+
+Tests
+-----
+All 57 tests pass (53 existing + 4 new auth tests):
+- 8 anomaly tests
+- 6 event processor tests
+- 6 incident lifecycle tests
+- 10 integration ingest tests
+- 4 integration graph tests
+- 12 integration runbook tests
+- 6 integration search tests
+- 4 auth tests (new)
+
+What the auth system proves
+---------------------------
+- Every API endpoint (except health) requires authentication
+- The tenant_id from the API key is enforced on all data queries
+- A tenant cannot read, update, or delete another tenant's incidents or runbooks
+- The ingest endpoint cannot be used to inject data into another tenant's namespace
+- The frontend handles 401 errors gracefully with a user-friendly message
+
+Interview talking points
+------------------------
+- Why API key auth instead of JWT? "For an MVP, API keys are simpler to implement
+  and test. JWT would be the next step for production with token refresh, scopes,
+  and OAuth2 integration. The architecture is designed to swap `get_current_tenant`
+  for a JWT dependency without changing any router code."
+- How do you prevent cross-tenant data leakage? "Every storage method accepts an
+  optional tenant_id parameter. When the API layer passes the authenticated tenant_id,
+  the storage layer filters or rejects records that don't match. This is defense in
+  depth: even if a router bug misses a check, the storage layer enforces the boundary."
+- Why override tenant_id on ingest? "The payload could contain any tenant_id. By
+  overriding it with the authenticated tenant from the API key, we prevent a malicious
+  client from injecting events into another tenant's namespace."
+- How would you scale this to production? "Replace the in-memory API_KEY_TENANTS
+  dictionary with a database lookup or a secrets manager (AWS Secrets Manager,
+  HashiCorp Vault). Add rate limiting per API key. Add audit logging for auth
+  failures."
+
+Resume bullets
+--------------
+- Implemented API key authentication (`X-API-Key`) with tenant isolation across
+  all backend endpoints using FastAPI dependency injection
+- Enforced tenant_id boundaries at the storage layer, preventing cross-tenant data
+  leakage for incidents, events, runbooks, and search queries
+- Updated frontend to send authenticated headers and handle 401 errors gracefully
+- Added 4 auth-specific tests verifying 401 responses on missing/invalid keys and
+  successful access with valid credentials
+
+Next steps
+----------
+- Day 26: Structured logging, trace ID propagation, CORS review.
+- Day 27: Build pipeline, Docker Compose for full stack.

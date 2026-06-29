@@ -1,0 +1,36 @@
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+ENV/
+env/
+
+# Build artifacts and test outputs
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Local development files
+*.db
+*.sqlite
+*.sqlite3
+signforge.db
+
+# Environment and secrets
+.env
+.env.local
+
+# IDE and OS files
+.DS_Store
+.idea
+.vscode
+*.swp
+
+# Logs
+*.log

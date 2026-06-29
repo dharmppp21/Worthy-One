@@ -1,0 +1,90 @@
+SignalForge Day 15 — Keyword Search & Incident Memory Report
+Date: July 4, 2026
+
+Day 15 goal:
+Add keyword search over runbooks and incidents, then connect search results to incident detail pages.
+
+1. What Changed
+
+Backend:
+- backend/app/schemas.py — Added SearchResultItem and SearchResponse Pydantic models.
+- backend/app/storage.py — Added search_incidents() and search_runbooks() methods using SQLAlchemy ilike on title, summary, description, and service_name.
+- backend/app/routers/search.py — New GET /search endpoint that queries both incidents and runbooks, returns unified results sorted by recency.
+- backend/app/main.py — Registered the search router.
+
+Frontend:
+- frontend/src/types.ts — Added SearchResultItem and SearchResponse types.
+- frontend/src/api.ts — Added searchKnowledgeBase() API call.
+- frontend/src/App.tsx — Added "Search" tab with search form, results grid, and incident click-through. Added RelatedRunbooks component to incident detail panel.
+- frontend/src/App.css — Added styles for search panel, search form, result cards, and related runbook cards.
+
+Git commits:
+- add keyword search backend
+- add search tab to dashboard
+- update local db
+
+2. Current behavior / architecture details
+
+Search backend:
+- GET /search?q={keyword} performs case-insensitive ILIKE search across incident title, summary, service_name and runbook title, description, service_name.
+- Results are capped at 50 per table and merged into a single list sorted by created_at descending.
+- Each result has a type field ("incident" or "runbook") so the frontend can render them differently.
+
+Search frontend:
+- New "Search" tab (🔍) alongside Incidents, Service Graph, and Runbooks.
+- Search input with submit button. Results appear as cards in the same grid layout as incidents.
+- Incident results are clickable and open the detail panel (switches back to Incidents tab).
+- Runbook results are read-only cards with purple left border.
+
+Incident detail memory:
+- When viewing an incident detail, a "Related Runbooks" section fetches runbooks for that incident's service_name.
+- Shows title, description, and numbered steps. If no runbooks exist, the section is hidden.
+- This connects operational knowledge (runbooks) directly to incident context without manual lookup.
+
+3. Smoke Test Result
+
+- Backend imports: OK (from app.main import app succeeds)
+- Alembic migration: ran cleanly on startup (SQLite context)
+- All 14 existing tests pass (8 anomaly + 6 incident tests)
+- No schema migration needed (search uses existing tables)
+
+4. How To Analyze It Yourself
+
+Start the backend:
+  cd "C:\Users\dharm\OneDrive\文档\Worthy One\signalforge_mvp\backend"
+  .\.venv\Scripts\activate
+  $env:DATABASE_URL="postgresql+psycopg2://signforge:signforge@localhost:5432/signforge"
+  $env:REDIS_URL="redis://localhost:6379/0"
+  uvicorn app.main:app --reload
+
+Test the search endpoint:
+  curl "http://127.0.0.1:8000/search?q=checkout"
+  curl "http://127.0.0.1:8000/search?q=payment"
+
+Open the dashboard:
+  http://localhost:5173
+  - Click the "Search" tab
+  - Type a keyword like "checkout" or "payment"
+  - Click an incident result to open its detail panel
+  - See related runbooks in the detail panel (if any exist for that service)
+
+5. Beginner-Friendly Explanation
+
+Before Day 15, if you wanted to find an old incident or a runbook, you had to scroll through lists manually. Now you can type a keyword like "checkout" and the system searches both incidents and runbooks at once, showing results from both categories.
+
+When you open an incident, the dashboard also looks up any runbooks written for that same service and shows them right there. This means if checkout-service has an incident and someone already wrote a runbook for it, you see the fix steps immediately without switching tabs.
+
+The search is basic keyword matching (SQL LIKE), not AI/vector search. But it works as a solid foundation — later we can upgrade to semantic search.
+
+6. Completion Checklist
+
+| Requirement | Status |
+|-------------|--------|
+| Users can search old incidents by keyword | ✅ |
+| Users can search runbooks by keyword | ✅ |
+| Search results show in a unified list | ✅ |
+| Incident results are clickable and open detail | ✅ |
+| Incident detail pages show related runbooks | ✅ |
+| Basic incident memory works before vector search | ✅ |
+| Tests pass | ✅ |
+| Backend imports cleanly | ✅ |
