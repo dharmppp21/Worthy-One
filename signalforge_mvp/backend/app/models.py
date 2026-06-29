@@ -1,9 +1,34 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Float, Index, JSON, String
+from sqlalchemy import Boolean, Column, DateTime, Float, Index, JSON, String
 from sqlalchemy.orm import declarative_base
 
 from app.database import Base
+
+
+class DiscoveredServiceDB(Base):
+    """SQLAlchemy ORM model for discovered services."""
+
+    __tablename__ = "discovered_services"
+
+    id = Column(String(128), primary_key=True)
+    service_id = Column(String(128), unique=True, index=True, nullable=False)
+    service_name = Column(String(128), index=True, nullable=False)
+    service_type = Column(String(128), nullable=False, default="unknown")
+    endpoints = Column(JSON, default=list)
+    host = Column(String(128), nullable=False)
+    metadata_ = Column("metadata", JSON, default=dict)
+    health_check_url = Column(String(512), nullable=True)
+    discovery_source = Column(String(128), nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    first_seen_at = Column(DateTime(timezone=True), nullable=False)
+    last_seen_at = Column(DateTime(timezone=True), nullable=False)
+    last_heartbeat_at = Column(DateTime(timezone=True), nullable=False)
+    tenant_id = Column(String(128), index=True, nullable=True)
+
+    __table_args__ = (
+        Index("idx_service_name_host", "service_name", "host"),
+    )
 
 
 class TelemetryEventModel(Base):

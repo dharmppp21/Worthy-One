@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from .models import DiscoveredService
-from ..models import DiscoveredServiceDB
+from app.models import DiscoveredServiceDB
 
 logger = logging.getLogger(__name__)
 
