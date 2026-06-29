@@ -67,12 +67,62 @@ feat: add K8s, cloud, config providers + environment auto-detection + discovery 
 feat: add network-based dependency detection system with graph analysis
 ```
 
+---
+
+## 3.5 Committing Like a Human
+
+Write commit messages that **a real human would understand** when reading `git log` six months from now. The person reading it might be you, a teammate, or a new hire. Make their life easy.
+
+### Write the subject line as a sentence — but drop the period
+
+Use the imperative mood ("Add", "Fix", "Update", "Remove") and describe the change in plain English.
+
+| ❌ Robotic / vague | ✅ Human-readable |
+|---|---|
+| `feat: implement scanner` | `feat: scan network connections to detect service dependencies` |
+| `feat: add models` | `feat: add ServiceDependency and DependencyGraph Pydantic models` |
+| `fix: bug` | `fix: skip LISTEN connections in NetworkConnectionScanner to avoid self-loops` |
+| `chore: update` | `chore: add kubernetes, boto3, and pyyaml to requirements.txt` |
+| `test: tests` | `test: add 21 tests for network scanner, dependency registry, and graph BFS` |
+
+### The subject line is a headline, not a label
+
+| ❌ Label-style | ✅ Headline-style |
+|---|---|
+| `feat: discovery` | `feat: add environment auto-detection for Docker, K8s, AWS, and Azure` |
+| `feat: registry` | `feat: add DependencyRegistry with upsert, filtering, and stale removal` |
+| `feat: provider` | `feat: add ConfigDiscoveryProvider for JSON/YAML service definitions` |
+
+### Use the body when the "why" matters
+
+If the change is non-obvious, add a blank line and explain the reasoning. This is free documentation embedded in the git history.
+
+```
+feat: add inferred placeholder services for unknown network endpoints
+
+When a process connects to an IP:port that is not in the ServiceRegistry,
+we now create an inferred DiscoveredService with a low confidence score (0.3).
+This prevents us from silently dropping dependencies on external databases,
+caches, or message queues that were not picked up by other discovery providers.
+```
+
+### Conventional Commit types we use
+
+| Type | Use when | Example |
+|---|---|---|
+| `feat:` | New feature or capability | `feat: add KubernetesDiscoveryProvider for in-cluster pod scanning` |
+| `fix:` | Bug fix | `fix: handle PermissionError in psutil.net_connections()` |
+| `test:` | New or updated tests | `test: add 13 tests for ProcessDiscoveryProvider` |
+| `docs:` | Documentation only | `docs: add firstreadme.md developer guide` |
+| `chore:` | Maintenance, deps, config | `chore: bump pytest-asyncio to 0.23` |
+| `refactor:` | Code restructuring | `refactor: extract _infer_dependency_type to shared helper` |
+
 ### Commit Checklist (MANDATORY before every push)
 
 1. **Run tests** — see Section 4 below.
 2. **Clean pycache** — remove `__pycache__` and `.pytest_cache` directories.
 3. **Stage changes** — `git add -A`
-4. **Write a descriptive commit message** — describe the feature/module, not the day.
+4. **Write a human-readable commit message** — describe what and why, not when.
 5. **Push** — `git push origin main`
 
 ---
