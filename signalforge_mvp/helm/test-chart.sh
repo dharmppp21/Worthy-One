@@ -11,6 +11,17 @@ if ! command -v helm &> /dev/null; then
     exit 1
 fi
 
+echo "=== Add Helm repositories ==="
+helm repo add bitnami https://charts.bitnami.com/bitnami 2>/dev/null || true
+helm repo update
+
+echo ""
+echo "=== Build chart dependencies ==="
+cd "${CHART_DIR}"
+helm dependency build
+cd - > /dev/null
+
+echo ""
 echo "=== Helm Lint ==="
 helm lint "${CHART_DIR}"
 
