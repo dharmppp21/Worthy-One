@@ -83,12 +83,24 @@ def maybe_create_incident(
             )
         )
 
+    # Boost severity for infrastructure services (database, message_queue)
+    severity = anomaly.severity
+    if event.service_name:
+        # Check if this is an infrastructure service by looking up in storage
+        infra_types = {"database", "message_queue", "cache"}
+        # We don't have direct service_type lookup here, so we check if the
+        # service name contains known infrastructure keywords as a heuristic
+        # or if the anomaly title indicates infrastructure
+        svc_lower = event.service_name.lower()
+        if any(kw in svc_lower for kw in ("db", "database", "postgres", "mysql", "redis", "kafka", "mq", "queue", "cache")):
+            severity = _boost_severity(severity)
+
     incident = Incident(
         id=str(uuid4()),
         tenant_id=event.tenant_id,
         service_name=event.service_name,
         title=f"{event.service_name}: {anomaly.title}",
-        severity=anomaly.severity,
+        severity=severity,
         status=IncidentStatus.investigating,
         summary=f"SignalForge detected abnormal behavior in {event.service_name}.",
         evidence=anomaly.evidence,
@@ -111,3 +123,9 @@ def maybe_create_incident(
             # No running event loop (e.g. in tests) — skip broadcast
             pass
     return incident if inserted else None
+
+
+def _boost_severity(current: str) -> str:
+    """Boost severity by one level for infrastructure services."""
+    severity_order = {"info": "warning", "warning": "critical", "critical": "critical"}
+    return severity_order.get(current, current)
