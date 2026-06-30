@@ -6,6 +6,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.discovery.dependencies.base import BaseDependencyAnalyzer
 from app.discovery.dependencies.models import ServiceDependency
 from app.discovery.registry import ServiceRegistry
 
@@ -31,7 +32,7 @@ def _infer_dependency_type(port: int) -> str:
     return _PORT_TYPE_MAP.get(port, "unknown")
 
 
-class NetworkConnectionScanner:
+class NetworkConnectionScanner(BaseDependencyAnalyzer):
     """Scans active network connections to infer service dependencies."""
 
     def __init__(self, registry: ServiceRegistry) -> None:
@@ -41,7 +42,7 @@ class NetworkConnectionScanner:
         """
         self._registry = registry
 
-    async def scan(self) -> List[ServiceDependency]:
+    async def analyze(self) -> List[ServiceDependency]:
         """Scan ESTABLISHED network connections and return inferred dependencies."""
         if psutil is None:
             logger.warning("psutil is not installed; network scan skipped.")

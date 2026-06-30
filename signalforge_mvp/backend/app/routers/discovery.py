@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, engine
+from app.discovery.dependencies.graph_builder import DependencyGraphBuilder
 from app.discovery.dependencies.traffic_analyzer import TrafficAnalyzer
 from app.discovery.dependencies.trace_analyzer import TraceAnalyzer
 from app.discovery.engine import DiscoveryEngine
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/services", tags=["discovery"])
 # Module-level engine and registry (created once per app lifetime)
 _discovery_engine: Optional[DiscoveryEngine] = None
 _service_registry: Optional[ServiceRegistry] = None
+_graph_builder: Optional[DependencyGraphBuilder] = None
 
 
 # ------------------------------------------------------------------
@@ -40,6 +42,12 @@ class DependencyDebugResponse(BaseModel):
     dependencies: List[Dict[str, Any]] = Field(default_factory=list)
     count: int = 0
     source: str = ""
+
+
+class ServiceDependenciesResponse(BaseModel):
+    upstream: List[Dict[str, Any]] = Field(default_factory=list)
+    downstream: List[Dict[str, Any]] = Field(default_factory=list)
+    self_service: Optional[Dict[str, Any]] = Field(default=None, alias="self")
 
 
 def get_db() -> Session:
@@ -70,6 +78,18 @@ def get_discovery_engine() -> DiscoveryEngine:
     return _discovery_engine
 
 
+def set_graph_builder(builder: DependencyGraphBuilder) -> None:
+    """Called from main.py during app startup to wire the graph builder."""
+    global _graph_builder
+    _graph_builder = builder
+
+
+def get_graph_builder() -> DependencyGraphBuilder:
+    if _graph_builder is None:
+        raise HTTPException(status_code=503, detail="Graph builder not initialized")
+    return _graph_builder
+
+
 @router.get("/discovered")
 async def list_discovered_services(
     tenant_id: Optional[str] = None,
@@ -89,6 +109,34 @@ async def trigger_discovery(
     """Trigger an on-demand discovery run and return results."""
     discovered = await engine.run_discovery()
     return [svc.model_dump() for svc in discovered]
+
+
+# ------------------------------------------------------------------
+# Service dependencies
+# ------------------------------------------------------------------
+
+@router.get("/{service_id}/dependencies")
+async def get_service_dependencies(
+    service_id: str,
+    builder: DependencyGraphBuilder = Depends(get_graph_builder),
+) -> ServiceDependenciesResponse:
+    """Return upstream and downstream dependencies for a given service."""
+    graph = builder.get_graph()
+
+    upstream = graph.get_upstream(service_id)
+    downstream = graph.get_downstream(service_id)
+
+    self_node = None
+    for node in graph.nodes:
+        if node.service_id == service_id:
+            self_node = node.model_dump()
+            break
+
+    return ServiceDependenciesResponse(
+        upstream=[dep.model_dump() for dep in upstream],
+        downstream=[dep.model_dump() for dep in downstream],
+        self_service=self_node,
+    )
 
 
 # ------------------------------------------------------------------

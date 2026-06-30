@@ -8,6 +8,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.discovery.dependencies.base import BaseDependencyAnalyzer
 from app.discovery.dependencies.models import ServiceDependency
 from app.discovery.registry import ServiceRegistry
 
@@ -77,7 +78,7 @@ def _extract_service_from_path(path: str) -> Optional[str]:
     return None
 
 
-class TrafficAnalyzer:
+class TrafficAnalyzer(BaseDependencyAnalyzer):
     """Analyzes HTTP traffic logs to infer service dependencies.
 
     Supports nginx combined logs, Envoy access logs, and JSON-formatted logs.

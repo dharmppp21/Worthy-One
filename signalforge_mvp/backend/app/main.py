@@ -22,10 +22,15 @@ from app.routers import discovery as discovery_router
 from app.database import DATABASE_URL, SessionLocal
 from app.services.kafka_consumer_worker import start_consumer_worker
 
+from app.discovery.dependencies.graph_builder import DependencyGraphBuilder
+from app.discovery.dependencies.mesh_analyzer import ServiceMeshAnalyzer
+from app.discovery.dependencies.network_scanner import NetworkConnectionScanner
+from app.discovery.dependencies.registry import DependencyRegistry
+from app.discovery.dependencies.trace_analyzer import TraceAnalyzer
 from app.discovery.environment import AutoConfigurator
 from app.discovery.engine import DiscoveryEngine
 from app.discovery.registry import ServiceRegistry
-from app.routers.discovery import set_discovery_engine
+from app.routers.discovery import set_discovery_engine, set_graph_builder
 
 from alembic.config import Config
 from alembic import command
@@ -110,6 +115,24 @@ def create_app() -> FastAPI:
                 from app.logging_config import get_logger
                 logger_local = get_logger("app.main")
                 logger_local.info("No discovery providers configured; discovery engine idle.")
+
+            # ------------------------------------------------------------------
+            # Dependency Graph Builder Setup
+            # ------------------------------------------------------------------
+            dep_registry = DependencyRegistry(db_session=db_session)
+            analyzers = [
+                NetworkConnectionScanner(registry=registry),
+                TraceAnalyzer(registry=registry),
+                ServiceMeshAnalyzer(registry=registry),
+            ]
+            graph_builder = DependencyGraphBuilder(
+                analyzers=analyzers,
+                registry=registry,
+                dep_registry=dep_registry,
+            )
+            set_graph_builder(graph_builder)
+            graph_builder.start_background_build(interval_seconds=60)
+
         except Exception as exc:
             from app.logging_config import get_logger
             logger_local = get_logger("app.main")

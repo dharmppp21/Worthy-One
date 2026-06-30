@@ -85,7 +85,7 @@ def _make_mock_connection(pid, laddr_ip, laddr_port, raddr_ip, raddr_port, statu
 @pytest.mark.asyncio
 async def test_scan_no_psutil(scanner):
     with patch("app.discovery.dependencies.network_scanner.psutil", None):
-        result = await scanner.scan()
+        result = await scanner.analyze()
     assert result == []
 
 
@@ -93,7 +93,7 @@ async def test_scan_no_psutil(scanner):
 async def test_scan_permission_error(scanner):
     with patch("app.discovery.dependencies.network_scanner.psutil") as mock_psutil:
         mock_psutil.net_connections = MagicMock(side_effect=PermissionError("access denied"))
-        result = await scanner.scan()
+        result = await scanner.analyze()
     assert result == []
 
 
@@ -102,7 +102,7 @@ async def test_scan_no_connections(scanner, registry):
     with patch("app.discovery.dependencies.network_scanner.psutil") as mock_psutil:
         mock_psutil.net_connections = MagicMock(return_value=[])
         mock_psutil.CONN_ESTABLISHED = "ESTABLISHED"
-        result = await scanner.scan()
+        result = await scanner.analyze()
     assert result == []
 
 
@@ -131,7 +131,7 @@ async def test_scan_finds_dependency(scanner, registry):
     with patch("app.discovery.dependencies.network_scanner.psutil") as mock_psutil:
         mock_psutil.net_connections = MagicMock(return_value=[conn])
         mock_psutil.CONN_ESTABLISHED = "ESTABLISHED"
-        result = await scanner.scan()
+        result = await scanner.analyze()
 
     assert len(result) == 1
     dep = result[0]
@@ -161,7 +161,7 @@ async def test_scan_skips_listen_connections(scanner, registry):
     with patch("app.discovery.dependencies.network_scanner.psutil") as mock_psutil:
         mock_psutil.net_connections = MagicMock(return_value=[conn])
         mock_psutil.CONN_ESTABLISHED = "ESTABLISHED"
-        result = await scanner.scan()
+        result = await scanner.analyze()
 
     assert result == []
 
@@ -183,7 +183,7 @@ async def test_scan_inferred_service(scanner, registry):
     with patch("app.discovery.dependencies.network_scanner.psutil") as mock_psutil:
         mock_psutil.net_connections = MagicMock(return_value=[conn])
         mock_psutil.CONN_ESTABLISHED = "ESTABLISHED"
-        result = await scanner.scan()
+        result = await scanner.analyze()
 
     assert len(result) == 1
     dep = result[0]
@@ -219,7 +219,7 @@ async def test_scan_deduplicates_connections(scanner, registry):
     with patch("app.discovery.dependencies.network_scanner.psutil") as mock_psutil:
         mock_psutil.net_connections = MagicMock(return_value=[conn1, conn2])
         mock_psutil.CONN_ESTABLISHED = "ESTABLISHED"
-        result = await scanner.scan()
+        result = await scanner.analyze()
 
     assert len(result) == 1
     assert result[0].connection_count == 2
@@ -233,7 +233,7 @@ async def test_scan_ignores_unknown_source_pid(scanner, registry):
     with patch("app.discovery.dependencies.network_scanner.psutil") as mock_psutil:
         mock_psutil.net_connections = MagicMock(return_value=[conn])
         mock_psutil.CONN_ESTABLISHED = "ESTABLISHED"
-        result = await scanner.scan()
+        result = await scanner.analyze()
 
     assert result == []
 
@@ -272,7 +272,7 @@ async def test_scan_multiple_different_targets(scanner, registry):
     with patch("app.discovery.dependencies.network_scanner.psutil") as mock_psutil:
         mock_psutil.net_connections = MagicMock(return_value=[conn1, conn2])
         mock_psutil.CONN_ESTABLISHED = "ESTABLISHED"
-        result = await scanner.scan()
+        result = await scanner.analyze()
 
     assert len(result) == 2
     types = {d.dependency_type for d in result}

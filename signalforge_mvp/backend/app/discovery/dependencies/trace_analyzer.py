@@ -7,6 +7,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.discovery.dependencies.base import BaseDependencyAnalyzer
 from app.discovery.dependencies.models import ServiceDependency
 from app.discovery.registry import ServiceRegistry
 
@@ -27,7 +28,7 @@ def _normalize_service_name(name: str) -> str:
     return name.strip().lower()
 
 
-class TraceAnalyzer:
+class TraceAnalyzer(BaseDependencyAnalyzer):
     """Analyzes distributed tracing data to infer service dependencies.
 
     Supports Jaeger and Zipkin trace backends. Can also accept raw trace JSON
