@@ -1,0 +1,35 @@
+# Dockerfile.discovery — Standalone Discovery Agent (Placeholder)
+#
+# This Dockerfile builds a lightweight container that only runs the
+# SignalForge discovery engine. It is useful in restricted environments
+# where the main backend cannot access the Docker socket or K8s API.
+#
+# The discovery agent reports discovered services to the main backend
+# via HTTP or a message queue. For now, this is a placeholder for
+# future implementation.
+#
+# Build:
+#   docker build -f Dockerfile.discovery -t signforge-discovery .
+#
+# Run:
+#   docker run -v /var/run/docker.sock:/var/run/docker.sock:ro signforge-discovery
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install only the dependencies needed for discovery
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy discovery-specific requirements
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir psutil docker kubernetes
+
+# Copy the discovery module source
+COPY backend/app/discovery ./discovery
+
+# Run the discovery engine in standalone mode
+CMD ["python", "-m", "discovery.engine", "--standalone", "--output", "http://backend:8000/discovery/webhook"]
