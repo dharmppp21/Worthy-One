@@ -35,8 +35,8 @@ class TelemetryEventModel(Base):
     __tablename__ = "telemetry_events"
 
     event_id = Column(String(128), primary_key=True)
-    tenant_id = Column(String(128), nullable=False)
-    service_name = Column(String(128), nullable=False)
+    tenant_id = Column(String(128), nullable=True)
+    service_name = Column(String(128), nullable=True)
     event_type = Column(String(32), nullable=False)
     timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
     name = Column(String(128), nullable=False)
@@ -45,10 +45,13 @@ class TelemetryEventModel(Base):
     severity = Column(String(32), nullable=True)
     message = Column(String(1024), nullable=True)
     attributes = Column(JSON, nullable=False, default=dict)
+    correlation_metadata = Column(JSON, nullable=True)
+    uncorrelated = Column(Boolean, nullable=False, default=False, index=True)
 
     __table_args__ = (
         Index("idx_events_tenant_service_ts", "tenant_id", "service_name", "timestamp"),
         Index("idx_events_event_type", "event_type"),
+        Index("idx_events_uncorrelated_tenant", "uncorrelated", "tenant_id"),
     )
 
 

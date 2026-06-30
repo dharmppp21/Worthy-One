@@ -25,12 +25,21 @@ class IncidentTimelineEvent(str, Enum):
     evidence_added = "evidence_added"
 
 
+class CorrelationMetadata(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    strategy: str = Field(default="none")
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    matched_field: str | None = Field(default=None)
+    candidate_count: int = Field(default=0, ge=0)
+
+
 class TelemetryEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     event_id: str = Field(default_factory=lambda: str(uuid4()), min_length=8, max_length=128)
-    tenant_id: str = Field(min_length=1)
-    service_name: str = Field(min_length=1)
+    tenant_id: str | None = Field(default=None, min_length=1)
+    service_name: str | None = Field(default=None, min_length=1)
     event_type: EventType
     timestamp: datetime
     name: str = Field(min_length=1)
@@ -39,13 +48,25 @@ class TelemetryEvent(BaseModel):
     severity: str | None = None
     message: str | None = None
     attributes: dict[str, Any] = Field(default_factory=dict)
+    correlation_metadata: CorrelationMetadata | None = Field(default=None)
+    uncorrelated: bool = Field(default=False)
 
-    @field_validator("event_id", "tenant_id", "service_name", "name")
+    @field_validator("event_id", "name")
     @classmethod
     def strip_required_strings(cls, value: str) -> str:
         cleaned = value.strip()
         if not cleaned:
             raise ValueError("value cannot be blank")
+        return cleaned
+
+    @field_validator("tenant_id", "service_name")
+    @classmethod
+    def strip_optional_strings(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            return None
         return cleaned
 
     @model_validator(mode="after")
