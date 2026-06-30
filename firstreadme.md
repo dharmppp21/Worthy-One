@@ -55,6 +55,9 @@ Worthy One/
 │   ├── simulator/              ← Traffic simulator
 │   ├── samples/                ← Event JSON samples
 │   ├── docker-compose.yml      ← Local infra stack
+│   ├── docker-compose.override.yml  ← Dev: live reload, hot restart
+│   ├── docker-compose.prod.yml      ← Prod: resource limits, read-only
+│   ├── Dockerfile.discovery         ← Standalone discovery agent
 │   └── README.md
 ├── Days/                       ← Daily build reports (SignalForge days)
 └── Prompt.txt                  ← Current active prompt
@@ -278,6 +281,13 @@ git push origin main
 - `cloudfront/` creates a CloudFront distribution with S3 origin for frontend and ALB origin for API.
 - Examples in `terraform/examples/` provide `eks-complete` (production) and `ecs-simple` (dev) configurations.
 
+### Docker Compose (`docker-compose.yml`, `docker-compose.override.yml`, `docker-compose.prod.yml`)
+- `docker-compose.yml` is the base file: PostgreSQL, Redis, Redpanda, backend, frontend, simulator. Includes health checks and `depends_on` with `condition: service_healthy`.
+- `docker-compose.override.yml` is for local dev: mounts source code for live reload, sets `ENVIRONMENT=development`, disables nginx frontend (use `npm run dev` instead). Auto-merged by `docker-compose up` when present.
+- `docker-compose.prod.yml` is for production: resource limits (CPU/memory), read-only root filesystem, `restart: unless-stopped`, only `config` discovery provider (no process scanning), no docker socket or `pid: host` mounts.
+- `Dockerfile.discovery` is a placeholder standalone discovery agent for restricted environments where the backend cannot access the Docker socket.
+- Use `docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d` for production deployments.
+
 ### Tests (`tests/`)
 - Use `pytest.mark.asyncio` for async tests.
 - Mock external APIs and system calls (psutil, docker, kubernetes, boto3, requests).
@@ -325,4 +335,4 @@ git log --oneline -5
 
 ---
 
-**Last updated:** 2026-06-30 — Added Terraform modules and AWS architecture documentation.
+**Last updated:** 2026-07-03 — Added Docker Compose overrides, production hardening, and deployment checklist.
