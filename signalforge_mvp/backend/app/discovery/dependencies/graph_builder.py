@@ -41,6 +41,11 @@ class DependencyGraphBuilder:
         self._dep_registry = dep_registry
         self._background_task: Optional[asyncio.Task] = None
         self._stop_event: Optional[asyncio.Event] = None
+        self._publisher: Optional[Any] = None
+
+    def set_publisher(self, publisher: Any) -> None:
+        """Set the discovery event publisher for broadcasting dependency events."""
+        self._publisher = publisher
 
     # ------------------------------------------------------------------
     # Public API
@@ -72,9 +77,11 @@ class DependencyGraphBuilder:
         # Merge by (source_id, target_id)
         merged = self._merge_dependencies(all_deps)
 
-        # Store merged dependencies incrementally
+        # Store merged dependencies incrementally and publish new ones
         for dep in merged:
-            self._dep_registry.store_dependency(dep)
+            is_new = self._dep_registry.store_dependency(dep)
+            if is_new and self._publisher is not None:
+                await self._publisher.publish_dependency_detected(dep)
 
         # Build graph with known service nodes
         services = self._registry.list_services(active_only=True)

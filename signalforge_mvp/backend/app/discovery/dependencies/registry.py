@@ -86,14 +86,19 @@ class DependencyRegistry:
     # Public API
     # ------------------------------------------------------------------
 
-    def store_dependency(self, dep: ServiceDependency) -> None:
-        """Upsert a dependency based on (source_service_id, target_service_id)."""
+    def store_dependency(self, dep: ServiceDependency) -> bool:
+        """Upsert a dependency based on (source_service_id, target_service_id).
+
+        Returns:
+            True if the dependency was newly created, False if it was updated.
+        """
         key = f"{dep.source_service_id}::{dep.target_service_id}"
         existing = self._db.query(ServiceDependencyDB).filter_by(
             source_service_id=dep.source_service_id,
             target_service_id=dep.target_service_id,
         ).first()
 
+        is_new = False
         now = datetime.now(timezone.utc)
         if existing:
             existing.connection_count = dep.connection_count
@@ -117,12 +122,14 @@ class DependencyRegistry:
             self._db.add(db_obj)
             self._db.commit()
             self._db.refresh(db_obj)
+            is_new = True
 
         self._cache[key] = self._to_model(
             self._db.query(ServiceDependencyDB)
             .filter_by(source_service_id=dep.source_service_id, target_service_id=dep.target_service_id)
             .first()
         )
+        return is_new
 
     def get_dependencies(
         self,
