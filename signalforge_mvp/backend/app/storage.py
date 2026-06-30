@@ -35,6 +35,10 @@ class DatabaseStore:
         self._session_factory = session_factory
 
     def _to_event(self, row: TelemetryEventModel) -> TelemetryEvent:
+        from app.schemas import CorrelationMetadata
+        correlation = None
+        if row.correlation_metadata:
+            correlation = CorrelationMetadata.model_validate(row.correlation_metadata)
         return TelemetryEvent(
             event_id=row.event_id,
             tenant_id=row.tenant_id,
@@ -47,6 +51,8 @@ class DatabaseStore:
             severity=row.severity,
             message=row.message,
             attributes=row.attributes or {},
+            correlation_metadata=correlation,
+            uncorrelated=row.uncorrelated,
         )
 
     def _to_incident(self, row: IncidentModel) -> Incident:
@@ -86,6 +92,11 @@ class DatabaseStore:
                 severity=event.severity,
                 message=event.message,
                 attributes=event.attributes,
+                correlation_metadata=(
+                    event.correlation_metadata.model_dump(mode="json")
+                    if event.correlation_metadata else None
+                ),
+                uncorrelated=event.uncorrelated,
             )
             session.add(db_event)
             session.commit()
@@ -97,6 +108,22 @@ class DatabaseStore:
                 event.model_dump(mode="json"),
             )
             return True
+
+    def list_uncorrelated_events(
+        self, tenant_id: str | None = None, limit: int = 50, offset: int = 0
+    ) -> list[TelemetryEvent]:
+        """Return uncorrelated events ordered by most recent first."""
+        with self._session_factory() as session:
+            query = session.query(TelemetryEventModel).filter_by(uncorrelated=True)
+            if tenant_id is not None:
+                query = query.filter_by(tenant_id=tenant_id)
+            rows = (
+                query.order_by(TelemetryEventModel.timestamp.desc())
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+            return [self._to_event(r) for r in rows]
 
     def get_recent_events(self, tenant_id: str, service_name: str) -> list[TelemetryEvent]:
         # Try Redis hot state first for fast rolling windows

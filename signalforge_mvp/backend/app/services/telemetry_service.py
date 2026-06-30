@@ -42,6 +42,17 @@ def list_recent_events(tenant_id: str, limit: int = 50) -> dict:
     }
 
 
+def list_uncorrelated_events(tenant_id: str, limit: int = 50, offset: int = 0) -> dict:
+    events = store.list_uncorrelated_events(tenant_id=tenant_id, limit=limit, offset=offset)
+    return {
+        "count": len(events),
+        "events": events,
+        "limit": limit,
+        "offset": offset,
+        "server_time": datetime.now(timezone.utc),
+    }
+
+
 def list_current_incidents(tenant_id: str) -> dict:
     incidents = store.list_incidents(tenant_id=tenant_id)
     return {"count": len(incidents), "incidents": incidents}
