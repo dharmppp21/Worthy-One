@@ -1,0 +1,89 @@
+# SignalForge — Production Override
+#
+# Apply this override on top of the base docker-compose.yml for
+# production-hardened deployments. Adds resource limits, read-only
+# filesystems, restart policies, and security-focused discovery settings.
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# What this override changes:
+#   - restart: unless-stopped for all services
+#   - read-only root filesystem for backend (only /tmp and /app/data writable)
+#   - CPU and memory limits per service
+#   - No source code volume mounts (use built image only)
+#   - Only config discovery provider (no process scanning in containers)
+#   - Removes pid: host and docker socket mount for security
+
+services:
+  postgres:
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+  redis:
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+
+  redpanda:
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 1G
+
+  backend:
+    restart: unless-stopped
+    # Remove source code mounts — use the built image only
+    volumes: []
+    # Remove docker socket and host pid for security
+    pid: ""
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+    volumes:
+      # Only /app/data is writable for any runtime state
+      - signforge_data:/app/data
+    environment:
+      # Production: only static config discovery, no process scanning
+      SIGNALFORGE_DISCOVERY_PROVIDERS: "config"
+      LOG_LEVEL: WARNING
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+  frontend:
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+
+volumes:
+  signforge_data:
