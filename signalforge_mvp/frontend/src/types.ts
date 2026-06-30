@@ -103,3 +103,52 @@ export type Runbook = {
   updated_at: string;
 };
 
+/* ─── Topology / Discovery Types (re-exported from api.ts for convenience) ─── */
+export type DiscoveredService = {
+  service_id: string;
+  service_name: string;
+  service_type: string;
+  host: string;
+  endpoints: string[];
+  discovery_source: string;
+  first_seen_at: string;
+  last_heartbeat_at: string;
+  metadata: Record<string, any>;
+  health_status?: "up" | "down" | "unknown";
+};
+
+export type ServiceHealth = {
+  service_id: string;
+  service_name: string;
+  status: "up" | "down" | "unknown";
+  last_probe_at: string;
+  uptime_percentage: number;
+  response_time_ms: number;
+};
+
+export type AutoDependencyEdge = {
+  source: string;
+  target: string;
+  dependency_type: string;
+  confidence: number;
+  connection_count: number;
+  avg_latency_ms: number;
+  error_rate: number;
+  sources: string[];
+  first_detected_at: string;
+  last_updated_at: string;
+};
+
+export type AutoDependencyGraph = {
+  nodes: DiscoveredService[];
+  edges: AutoDependencyEdge[];
+  generated_at: string;
+};
+
+export type DiscoveryEvent = {
+  type: "service_discovered" | "service_removed" | "health_changed" | "dependency_detected" | "dependency_removed";
+  service_name: string;
+  detail: string;
+  severity: "info" | "warning" | "critical";
+  timestamp: string;
+};

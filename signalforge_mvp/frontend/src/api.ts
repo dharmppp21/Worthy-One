@@ -119,4 +119,74 @@ export async function deleteRunbook(runbookId: string): Promise<void> {
   });
 }
 
+/* ─── Topology / Discovery API ─── */
+
+export type DiscoveredService = {
+  service_id: string;
+  service_name: string;
+  service_type: string;
+  host: string;
+  endpoints: string[];
+  discovery_source: string;
+  first_seen_at: string;
+  last_heartbeat_at: string;
+  metadata: Record<string, any>;
+  health_status?: "up" | "down" | "unknown";
+};
+
+export type ServiceHealth = {
+  service_id: string;
+  service_name: string;
+  status: "up" | "down" | "unknown";
+  last_probe_at: string;
+  uptime_percentage: number;
+  response_time_ms: number;
+};
+
+export type AutoDependencyEdge = {
+  source: string;
+  target: string;
+  dependency_type: string;
+  confidence: number;
+  connection_count: number;
+  avg_latency_ms: number;
+  error_rate: number;
+  sources: string[];
+  first_detected_at: string;
+  last_updated_at: string;
+};
+
+export type AutoDependencyGraph = {
+  nodes: DiscoveredService[];
+  edges: AutoDependencyEdge[];
+  generated_at: string;
+};
+
+export type DiscoveryEvent = {
+  type: "service_discovered" | "service_removed" | "health_changed" | "dependency_detected" | "dependency_removed";
+  service_name: string;
+  detail: string;
+  severity: "info" | "warning" | "critical";
+  timestamp: string;
+};
+
+export async function fetchDiscoveredServices(): Promise<DiscoveredService[]> {
+  return apiFetch<DiscoveredService[]>("/services/discovered");
+}
+
+export async function fetchAutoGraph(): Promise<AutoDependencyGraph> {
+  return apiFetch<AutoDependencyGraph>("/graph/auto");
+}
+
+export async function fetchServicesHealth(): Promise<ServiceHealth[]> {
+  return apiFetch<ServiceHealth[]>("/services/health");
+}
+
+export async function fetchIncidentsByService(serviceName: string): Promise<Incident[]> {
+  const data = await apiFetch<{ count: number; incidents: Incident[] }>(
+    `/incidents?service_name=${encodeURIComponent(serviceName)}`
+  );
+  return data.incidents;
+}
+
 export { ApiError };
