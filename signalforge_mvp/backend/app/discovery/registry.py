@@ -45,6 +45,7 @@ class ServiceRegistry:
             host=service.host,
             metadata_=service.metadata,
             health_check_url=service.health_check_url,
+            health_status=service.health_status,
             discovery_source=service.discovery_source,
             is_active=True,
             first_seen_at=service.first_seen_at,
@@ -69,6 +70,7 @@ class ServiceRegistry:
             host=db_obj.host,
             metadata=db_obj.metadata_ or {},
             health_check_url=db_obj.health_check_url,
+            health_status=db_obj.health_status,
             discovery_source=db_obj.discovery_source,
             first_seen_at=ensure_utc(db_obj.first_seen_at),
             last_seen_at=ensure_utc(db_obj.last_seen_at),
@@ -176,6 +178,28 @@ class ServiceRegistry:
         # Rebuild cache from this result set
         self._cache = {s.service_id: s for s in services}
         return services
+
+    def update_health_status(self, service_id: str, health_status: str) -> None:
+        """
+        Update the health status of a service.
+
+        Args:
+            service_id: The service UUID.
+            health_status: The new health status string.
+
+        Raises:
+            ValueError: If the service is not found.
+        """
+        db_obj = self._db.query(DiscoveredServiceDB).filter_by(service_id=service_id).first()
+        if not db_obj:
+            raise ValueError(f"Service with id={service_id} not found")
+
+        db_obj.health_status = health_status
+        db_obj.last_seen_at = datetime.now(timezone.utc)
+        self._db.commit()
+        self._db.refresh(db_obj)
+
+        self._cache[service_id] = self._to_model(db_obj)
 
     def update_heartbeat(self, service_id: str) -> None:
         """
