@@ -14,7 +14,7 @@ if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
 from app.database import Base, DATABASE_URL  # noqa: E402
-from app.models import TelemetryEventModel, IncidentModel, ServiceDependencyDB  # noqa: E402, F401
+from app.models import DiscoveredServiceDB, ServiceHealthDB  # noqa: E402, F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

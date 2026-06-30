@@ -19,6 +19,7 @@ class DiscoveredServiceDB(Base):
     host = Column(String(128), nullable=False)
     metadata_ = Column("metadata", JSON, default=dict)
     health_check_url = Column(String(512), nullable=True)
+    health_status = Column(String(32), nullable=True)
     discovery_source = Column(String(128), nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
     first_seen_at = Column(DateTime(timezone=True), nullable=False)
@@ -28,6 +29,26 @@ class DiscoveredServiceDB(Base):
 
     __table_args__ = (
         Index("idx_service_name_host", "service_name", "host"),
+    )
+
+
+class ServiceHealthDB(Base):
+    """SQLAlchemy ORM model for service health probe history."""
+
+    __tablename__ = "service_health"
+
+    id = Column(String(128), primary_key=True)
+    service_id = Column(String(128), index=True, nullable=False)
+    status = Column(String(32), nullable=False, default="unknown")
+    probe_results = Column(JSON, nullable=False, default=list)
+    last_probed_at = Column(DateTime(timezone=True), nullable=False)
+    last_up_at = Column(DateTime(timezone=True), nullable=True)
+    last_down_at = Column(DateTime(timezone=True), nullable=True)
+    uptime_percentage = Column(Float, nullable=False, default=100.0)
+    tenant_id = Column(String(128), index=True, nullable=True)
+
+    __table_args__ = (
+        Index("idx_health_service_probed", "service_id", "last_probed_at"),
     )
 
 
