@@ -1,0 +1,60 @@
+name: Helm Chart CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  helm-lint:
+    name: Lint Helm Chart
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.14.0
+
+      - name: Lint Helm chart
+        run: |
+          helm lint ./signalforge_mvp/helm/signforge
+
+      - name: Template with default values
+        run: |
+          helm template signforge ./signalforge_mvp/helm/signforge > /dev/null
+
+      - name: Template with external PostgreSQL
+        run: |
+          helm template signforge ./signalforge_mvp/helm/signforge \
+            --set postgresql.enabled=false \
+            --set env.DATABASE_URL=postgresql://user:pass@host:5432/db \
+            > /dev/null
+
+      - name: Template with single-namespace RBAC
+        run: |
+          helm template signforge ./signalforge_mvp/helm/signforge \
+            --set discovery.kubernetes.clusterRole=false \
+            > /dev/null
+
+      - name: Template with Kafka enabled
+        run: |
+          helm template signforge ./signalforge_mvp/helm/signforge \
+            --set kafka.enabled=true \
+            > /dev/null
+
+      - name: Template with HPA enabled
+        run: |
+          helm template signforge ./signalforge_mvp/helm/signforge \
+            --set hpa.enabled=true \
+            > /dev/null
+
+      - name: Template with Ingress enabled
+        run: |
+          helm template signforge ./signalforge_mvp/helm/signforge \
+            --set ingress.enabled=true \
+            > /dev/null
