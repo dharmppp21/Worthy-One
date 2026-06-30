@@ -21,6 +21,7 @@ Worthy One/
 │   │   │   ├── discovery/      ← Service discovery system
 │   │   │   │   ├── providers/  ← Process, Docker, K8s, Cloud, Config
 │   │   │   │   ├── dependencies/ ← Network scanner, dependency graph
+│   │   │   │   ├── correlation.py ← Event-to-service correlation engine
 │   │   │   │   ├── models.py
 │   │   │   │   ├── registry.py
 │   │   │   │   ├── engine.py
@@ -234,6 +235,13 @@ git push origin main
 - Infer unknown services with `confidence_score = 0.3`.
 - Store results in `DependencyRegistry` with upsert logic.
 
+### Correlation Engine (`app/discovery/correlation.py`)
+- `EventServiceCorrelator` auto-matches telemetry events to discovered services.
+- Strategies are tried in priority order: exact_name, source_ip_port, hostname, container_id, pod_name, process_id, trace_context, fallback.
+- Disambiguation picks the most recent heartbeat when multiple candidates match.
+- Correlation metadata (strategy, confidence, matched_field) is persisted with the event.
+- Events that cannot be correlated are flagged as `uncorrelated` and can be queried via `GET /events/uncorrelated`.
+
 ### Tests (`tests/`)
 - Use `pytest.mark.asyncio` for async tests.
 - Mock external APIs and system calls (psutil, docker, kubernetes, boto3, requests).
@@ -281,4 +289,4 @@ git log --oneline -5
 
 ---
 
-**Last updated:** Auto-generated. Read this every time before starting work.
+**Last updated:** 2026-06-30 — Added correlation engine documentation.
