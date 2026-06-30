@@ -1,7 +1,7 @@
 # SignalForge — Project State Summary
 
-> **Last updated:** Day 31 (July 20, 2026)  
-> **Current phase:** Finalized for submission. Full demo verified. Architecture summary and interview guide written. All documentation complete.
+> **Last updated:** Day 42 (July 2026)  
+> **Current phase:** Deployment artifacts complete. Helm chart, Terraform modules, Docker Compose with auto-discovery, and production hardening all documented and committed.
 
 ---
 
@@ -182,7 +182,16 @@
 ### Infrastructure & Docs
 | File | Day | What it does now |
 |------|-----|------------------|
-| `docker-compose.yml` | 8 | PostgreSQL 16 + Redis 7 with volumes, health checks, restart policies |
+| `docker-compose.yml` | 8, 42 | PostgreSQL 16 + Redis 7 + Redpanda + Backend + Frontend + Simulator with health checks, auto-discovery env vars, Docker socket mount, and pid: host for process discovery |
+| `docker-compose.override.yml` | 42 | Local dev override: live reload (uvicorn --reload), source code volume mounts, ENVIRONMENT=development, LOG_LEVEL=DEBUG, disables nginx frontend |
+| `docker-compose.prod.yml` | 42 | Production override: resource limits (CPU/memory), read-only root filesystem, restart policies, only config discovery provider, no docker socket or pid: host |
+| `Dockerfile.discovery` | 42 | Standalone discovery agent placeholder based on python:3.12-slim with psutil, docker, kubernetes dependencies |
+| `helm/signforge/Chart.yaml` | 40 | Helm chart metadata with optional Bitnami PostgreSQL, Redis, Kafka subchart dependencies |
+| `helm/signforge/values.yaml` | 40 | Comprehensive Helm defaults: discovery, RBAC, resources, scheduling, dependency toggles |
+| `helm/signforge/templates/` | 40 | _helpers.tpl, deployment.yaml, service.yaml, configmap.yaml, serviceaccount.yaml, rbac.yaml, ingress.yaml, hpa.yaml, NOTES.txt, test-connection.yaml |
+| `terraform/modules/signforge/` | 41 | Root module with conditional sub-modules: VPC, EKS, ECS, RDS, ElastiCache, MSK, ALB, CloudFront, IAM, Security Groups |
+| `terraform/examples/` | 41 | eks-complete (production EKS) and ecs-simple (dev Fargate) examples with READMEs |
+| `AWS_ARCHITECTURE.md` | 27, 41 | AWS deployment spec: ECS/EKS, RDS, ElastiCache, MSK, ALB, CloudFront, Terraform modules, CI/CD |
 | `backend/alembic.ini` | 10 | Alembic configuration file |
 | `backend/alembic/` | 10 | Alembic env.py, migration templates, and versioned migration scripts |
 | `Days/SignalForge_Day21_Decoupled_Ingestion_Report.txt` | 21 | Day 21 report: decoupled ingestion, EventProcessor, 202 Accepted, backpressure, horizontal scaling |
@@ -224,6 +233,9 @@
 | 29 | Demo seed data script + DEMO.md walkthrough with 8-step narrative and API commands | ✅ Done |
 | 30 | Final QA: tests pass, warnings suppressed, stale files removed, ready for demo | ✅ Done |
 | 31 | Finalization: demo verified end-to-end, architecture summary, interview guide, all docs complete | ✅ Done |
+| 40 | Helm chart for Kubernetes with auto-discovery, optional subcharts, RBAC, and CI | ✅ Done |
+| 41 | Terraform modules for AWS: EKS + ECS, RDS, ElastiCache, MSK, ALB, CloudFront, IAM, Security Groups | ✅ Done |
+| 42 | Docker Compose auto-discovery: docker socket mount, process discovery, override files, production hardening, deployment checklist | ✅ Done |
 
 ---
 

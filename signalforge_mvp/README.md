@@ -126,6 +126,47 @@ Stop: `docker-compose down` (add `-v` to wipe data)
 
 ---
 
+## Docker Compose with Auto-Discovery
+
+The backend container automatically discovers other services in the same Docker network when `SIGNALFORGE_DISCOVERY_ENABLED=true`.
+
+**What gets discovered:**
+- Other containers with `healthcheck` or `com.signforge.service` labels
+- Host processes (when `pid: host` is enabled — local dev only)
+- Static config files mounted at `/app/config.yaml`
+
+**Verify discovery is working:**
+```powershell
+# Check discovered services via the API
+docker exec signforge-backend curl -s http://localhost:8000/services/discovered
+
+# Or from your host
+curl http://localhost:8000/services/discovered
+```
+
+**Local development override:**
+`docker-compose.override.yml` is automatically picked up by `docker-compose up` when present. It mounts the backend source code for live reloading and disables the nginx frontend container (use `npm run dev` in `./frontend` instead).
+
+```powershell
+# Dev mode: hot reload on backend code changes
+cd signalforge_mvp
+docker-compose up -d          # backend, postgres, redis, redpanda
+# In another terminal:
+cd backend && uvicorn app.main:app --reload
+# In another terminal:
+cd frontend && npm run dev
+```
+
+**Production override:**
+`docker-compose.prod.yml` adds resource limits, read-only filesystems, and disables process discovery (only `config` provider).
+
+```powershell
+# Production mode
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+---
+
 ## Demo Walkthrough
 
 **What to do and what you'll see:**
@@ -295,6 +336,9 @@ signalforge_mvp/
 │   └── .dockerignore                   # Excludes cache, .env
 │
 ├── docker-compose.yml                  # Full stack: PostgreSQL + Redis + Redpanda + Backend + Frontend + Simulator
+├── docker-compose.override.yml         # Local dev: live reload, hot restart, Vite HMR
+├── docker-compose.prod.yml             # Production: resource limits, read-only, security hardening
+├── Dockerfile.discovery                # Standalone discovery agent (placeholder)
 ├── AWS_ARCHITECTURE.md                 # Complete AWS deployment spec (ECS, RDS, ElastiCache, MSK, ALB, CloudFront, Terraform, CI/CD)
 ├── PROJECT_STATE.md                    # Architecture decisions, file inventory, test counts, known bugs, next steps
 └── README.md                           # This file
@@ -357,8 +401,8 @@ Results saved to `tests/load/load_test_results.json`.
 
 ## AWS Deployment
 
-See [`AWS_ARCHITECTURE.md`](AWS_ARCHITECTURE.md) for the complete production deployment spec:
-- ECS Fargate (3-20 tasks, autoscaling)
+See [`AWS_ARCHITECTURE.md`](AWS_ARCHITECTURE.md) for the complete production deployment spec and Terraform modules:
+- ECS Fargate or EKS (3-20 tasks, autoscaling)
 - RDS PostgreSQL Multi-AZ
 - ElastiCache Redis Cluster
 - Amazon MSK (managed Kafka)
@@ -366,8 +410,68 @@ See [`AWS_ARCHITECTURE.md`](AWS_ARCHITECTURE.md) for the complete production dep
 - CloudFront CDN
 - Secrets Manager
 - CloudWatch monitoring + alerting
+- Terraform modules in `terraform/modules/signforge/` with EKS and ECS examples
 
 **Estimated cost:** Dev ~$130/month, Prod ~$400/month.
+
+**Deploy with Terraform:**
+```bash
+cd terraform/examples/eks-complete
+terraform init
+terraform plan
+terraform apply
+```
+
+---
+
+## Kubernetes Deployment
+
+Deploy SignalForge on Kubernetes using the Helm chart in `helm/signforge/`.
+
+**Quick install:**
+```bash
+helm install signforge ./helm/signforge \
+  --namespace monitoring \
+  --create-namespace
+```
+
+The chart includes:
+- SignalForge backend Deployment with init container for Alembic migrations
+- Optional PostgreSQL, Redis, and Kafka subcharts (Bitnami)
+- RBAC (ClusterRole or Role) for service discovery
+- ConfigMap-generated `config.yaml` from `values.yaml`
+- ServiceAccount, Ingress (optional), HPA (optional)
+
+**With external PostgreSQL:**
+```bash
+helm install signforge ./helm/signforge \
+  --set postgresql.enabled=false \
+  --set env.DATABASE_URL=postgresql://user:pass@host:5432/signforge
+```
+
+See `helm/signforge/README.md` for full configuration reference.
+
+---
+
+## Production Deployment Checklist
+
+Before deploying SignalForge to production, verify the following:
+
+| Item | Why | How |
+|------|-----|-----|
+| **PostgreSQL (not SQLite)** | SQLite cannot handle concurrent writes. PostgreSQL with connection pooling is required for production load. | Use RDS or the PostgreSQL subchart. |
+| **Redis enabled** | Rolling window queries must be sub-millisecond. Without Redis, anomaly detection falls back to PostgreSQL SELECTs. | Use ElastiCache or the Redis subchart. |
+| **Kafka (optional)** | Enables async ingestion and horizontal scaling of workers. Without Kafka, the API processes events synchronously. | Use MSK or the Kafka subchart. |
+| **Disable process discovery** | Scanning host processes from a container is a security risk. In production, use `config` or `kubernetes` providers only. | Set `SIGNALFORGE_DISCOVERY_PROVIDERS=config` or use the Helm chart defaults. |
+| **Secrets management** | Database passwords and API keys must not be in source control or environment files. | Use AWS Secrets Manager, Kubernetes Secrets, or HashiCorp Vault. |
+| **TLS/SSL** | All external traffic must be encrypted. | Configure ACM certificates on ALB/CloudFront or cert-manager in Kubernetes. |
+| **Monitoring** | You need visibility into latency, errors, and resource usage. | CloudWatch, Prometheus + Grafana, or Datadog. |
+| **Backups** | Incident data is critical. Losing it means losing operational history. | RDS automated snapshots (7-day retention minimum). |
+| **Rate limiting** | Prevents abuse and protects downstream services. | The backend has a built-in 100 RPS limit. Upgrade to Redis-backed for multi-instance. |
+| **RBAC / IAM review** | Least-privilege access prevents lateral movement. | Review the IAM roles in `terraform/modules/signforge/modules/iam/`. |
+| **Health checks** | Kubernetes and ALB need to know when a pod is unhealthy. | The backend exposes `/health` with deep dependency checks. |
+| **Resource limits** | Prevents a single pod from consuming all node resources. | Set CPU and memory requests/limits in Kubernetes or Docker Compose. |
+| **Read-only root filesystem** | Reduces attack surface by preventing runtime file modifications. | Enable `read_only: true` in Docker Compose or Kubernetes security context. |
 
 ---
 
