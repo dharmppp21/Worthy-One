@@ -1,9 +1,10 @@
 """Discovery API endpoints for querying and triggering service discovery."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -14,14 +15,30 @@ from app.discovery.dependencies.trace_analyzer import TraceAnalyzer
 from app.discovery.engine import DiscoveryEngine
 from app.discovery.models import DiscoveredService
 from app.discovery.registry import ServiceRegistry
-from app.models import DiscoveredServiceDB
+from app.models import DiscoveredServiceDB, ServiceHealthDB
 
 router = APIRouter(prefix="/services", tags=["discovery"])
 
-# Module-level engine and registry (created once per app lifetime)
+# Module-level engine, registry, and graph builder (created once per app lifetime)
 _discovery_engine: Optional[DiscoveryEngine] = None
 _service_registry: Optional[ServiceRegistry] = None
 _graph_builder: Optional[DependencyGraphBuilder] = None
+
+# Pydantic response models for health endpoints
+class HealthRecordResponse(BaseModel):
+    service_id: str
+    service_name: str
+    status: str
+    last_probed_at: Optional[datetime] = None
+    response_time_ms: Optional[float] = None
+
+class HealthHistoryResponse(BaseModel):
+    service_id: str
+    service_name: str
+    probes: List[dict]
+    total: int
+    limit: int
+    offset: int
 
 
 # ------------------------------------------------------------------
@@ -184,4 +201,77 @@ async def debug_trace_analyzer(
         dependencies=[dep.model_dump() for dep in deps],
         count=len(deps),
         source="distributed_tracing",
+    )
+
+
+# ------------------------------------------------------------------
+# Health endpoints
+# ------------------------------------------------------------------
+
+@router.get("/health")
+async def list_services_health(
+    db: Session = Depends(get_db),
+) -> List[HealthRecordResponse]:
+    """Return health records for all active services."""
+    registry = ServiceRegistry(db_session=db)
+    services = registry.list_services(active_only=True)
+    return [
+        HealthRecordResponse(
+            service_id=s.service_id,
+            service_name=s.service_name,
+            status=s.health_status or "unknown",
+        )
+        for s in services
+    ]
+
+
+@router.get("/{service_id}/health")
+async def get_service_health_history(
+    service_id: str,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+) -> HealthHistoryResponse:
+    """Return detailed health probe history for a specific service."""
+    registry = ServiceRegistry(db_session=db)
+    service = registry.get_service(service_id)
+    if service is None:
+        raise HTTPException(status_code=404, detail="Service not found")
+
+    # Query health history from DB
+    health_records = (
+        db.query(ServiceHealthDB)
+        .filter_by(service_id=service_id)
+        .order_by(ServiceHealthDB.last_probed_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    total = (
+        db.query(ServiceHealthDB)
+        .filter_by(service_id=service_id)
+        .count()
+    )
+
+    probes = []
+    for rec in health_records:
+        probe_list = rec.probe_results or []
+        if probe_list:
+            latest = probe_list[-1]
+            probes.append({
+                "status": rec.status,
+                "probed_at": rec.last_probed_at.isoformat() if rec.last_probed_at else None,
+                "response_time_ms": latest.get("response_time_ms"),
+                "response_status_code": latest.get("response_status_code"),
+                "error_message": latest.get("error_message"),
+            })
+
+    return HealthHistoryResponse(
+        service_id=service_id,
+        service_name=service.service_name,
+        probes=probes,
+        total=total,
+        limit=limit,
+        offset=offset,
     )
