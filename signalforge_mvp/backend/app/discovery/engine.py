@@ -29,6 +29,11 @@ class DiscoveryEngine:
         self._providers: List[ServiceDiscoveryProvider] = []
         self._background_task: Optional[asyncio.Task] = None
         self._stop_event: Optional[asyncio.Event] = None
+        self._publisher: Optional[Any] = None
+
+    def set_publisher(self, publisher: Any) -> None:
+        """Set the discovery event publisher for broadcasting events."""
+        self._publisher = publisher
 
     # ------------------------------------------------------------------
     # Provider management
@@ -74,11 +79,30 @@ class DiscoveryEngine:
                     seen.add(key)
                     discovered.append(service)
 
-        # Update registry
+        # Update registry and publish events
         for service in discovered:
-            self._registry.register_service(service)
+            service_id, is_new = self._registry.register_service(service)
+            if is_new and self._publisher is not None:
+                await self._publisher.publish_service_discovered(service)
+            # Track health changes
+            if self._publisher is not None:
+                status = service.health_status if hasattr(service, "health_status") and service.health_status else "unknown"
+                if self._publisher.track_health(service_id, status):
+                    # Health changed — publish event (but only if we had a prior value)
+                    old_status = self._publisher.get_cached_health(service_id)
+                    if old_status is not None:
+                        await self._publisher.publish_health_changed(
+                            service_id, service.service_name, old_status, status
+                        )
 
         return discovered
+
+    async def remove_stale(self, timeout_seconds: int = 120) -> None:
+        """Remove stale services and publish events."""
+        removed = self._registry.remove_stale_services(timeout_seconds)
+        if self._publisher is not None:
+            for service_id, service_name in removed:
+                await self._publisher.publish_service_removed(service_id, service_name)
 
     async def _safe_discover(self, provider: ServiceDiscoveryProvider) -> List[DiscoveredService]:
         """
@@ -137,6 +161,11 @@ class DiscoveryEngine:
                 await self.run_discovery()
             except Exception as exc:
                 logger.error("Discovery loop error: %s", exc, exc_info=True)
+
+            try:
+                await self.remove_stale(timeout_seconds=interval_seconds * 3)
+            except Exception as exc:
+                logger.error("Stale removal error: %s", exc, exc_info=True)
 
             try:
                 await asyncio.wait_for(

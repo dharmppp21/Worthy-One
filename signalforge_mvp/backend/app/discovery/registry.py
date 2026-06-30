@@ -85,7 +85,7 @@ class ServiceRegistry:
     # Public API
     # ------------------------------------------------------------------
 
-    def register_service(self, service: DiscoveredService) -> str:
+    def register_service(self, service: DiscoveredService) -> tuple[str, bool]:
         """
         Register or update a service.
 
@@ -96,7 +96,8 @@ class ServiceRegistry:
             service: The service to register.
 
         Returns:
-            The service_id of the registered (or updated) service.
+            Tuple of (service_id, is_new) where is_new is True if the service
+            was just created.
         """
         now = datetime.now(timezone.utc)
         existing = (
@@ -105,6 +106,7 @@ class ServiceRegistry:
             .first()
         )
 
+        is_new = False
         if existing:
             # Update existing record
             existing.service_type = service.service_type
@@ -128,12 +130,13 @@ class ServiceRegistry:
             self._db.commit()
             self._db.refresh(db_obj)
             service_id = db_obj.service_id
+            is_new = True
 
         # Sync cache
         self._cache[service_id] = self._to_model(
             self._db.query(DiscoveredServiceDB).filter_by(service_id=service_id).first()
         )
-        return service_id
+        return service_id, is_new
 
     def get_service(self, service_id: str) -> Optional[DiscoveredService]:
         """
@@ -197,7 +200,7 @@ class ServiceRegistry:
 
         self._cache[service_id] = self._to_model(db_obj)
 
-    def remove_stale_services(self, timeout_seconds: int = 120) -> int:
+    def remove_stale_services(self, timeout_seconds: int = 120) -> list[tuple[str, str]]:
         """
         Remove services whose last heartbeat is older than ``timeout_seconds``.
 
@@ -205,7 +208,7 @@ class ServiceRegistry:
             timeout_seconds: Staleness threshold in seconds.
 
         Returns:
-            The number of services marked inactive.
+            List of (service_id, service_name) tuples for services marked inactive.
         """
         now = datetime.now(timezone.utc)
         cutoff = now - timedelta(seconds=timeout_seconds)
@@ -217,11 +220,11 @@ class ServiceRegistry:
             .all()
         )
 
-        count = 0
+        removed: list[tuple[str, str]] = []
         for db_obj in stale:
             db_obj.is_active = False
-            count += 1
+            removed.append((db_obj.service_id, db_obj.service_name))
             self._cache.pop(db_obj.service_id, None)
 
         self._db.commit()
-        return count
+        return removed
