@@ -1,0 +1,43 @@
+name: Terraform Validate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "terraform/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "terraform/**"
+
+jobs:
+  terraform-validate:
+    name: Validate Terraform Modules
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Validate EKS Complete Example
+        run: |
+          cd terraform/examples/eks-complete
+          terraform init -backend=false
+          terraform validate
+
+      - name: Validate ECS Simple Example
+        run: |
+          cd terraform/examples/ecs-simple
+          terraform init -backend=false
+          terraform validate
+
+      - name: Validate Root Module
+        run: |
+          cd terraform/modules/signforge
+          terraform init -backend=false
+          terraform validate
