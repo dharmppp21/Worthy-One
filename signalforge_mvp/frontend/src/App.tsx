@@ -1,10 +1,17 @@
 import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchAITriage, fetchIncidentDetail, fetchIncidents, fetchRootCause, fetchServiceGraph, searchKnowledgeBase, updateIncidentStatus, ApiError } from "./api";
+import {
+  fetchAITriage, fetchIncidentDetail, fetchIncidents, fetchRootCause, fetchServiceGraph,
+  searchKnowledgeBase, updateIncidentStatus, ApiError,
+  fetchDiscoveredServices, fetchAutoGraph, fetchServicesHealth,
+} from "./api";
 import { fetchRunbooks, createRunbook, deleteRunbook } from "./api";
 import { RunbookPanel } from "./components/RunbookPanel";
 import { ServiceGraphView } from "./components/ServiceGraph";
-import type { Incident, IncidentTimelineEntry, AITriageResponse, RootCauseResponse, Runbook, SearchResultItem } from "./types";
+import ServiceTopologyMap from "./components/ServiceTopologyMap";
+import ServiceDetailsPanel from "./components/ServiceDetailsPanel";
+import DiscoveryEventFeed from "./components/DiscoveryEventFeed";
+import type { Incident, IncidentTimelineEntry, AITriageResponse, RootCauseResponse, Runbook, SearchResultItem, DiscoveredService, DiscoveryEvent } from "./types";
 import "./App.css";
 
 const queryClient = new QueryClient();
@@ -483,10 +490,12 @@ function EmptyState() {
 
 /* ─────────── Dashboard ─────────── */
 function Dashboard() {
-  const [activeTab, setActiveTab] = useState<"incidents" | "graph" | "runbooks" | "search">("incidents");
+  const [activeTab, setActiveTab] = useState<"incidents" | "graph" | "runbooks" | "search" | "topology" | "discovery">("incidents");
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
+  const [selectedService, setSelectedService] = useState<DiscoveredService | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [semanticMode, setSemanticMode] = useState(false);
+  const [discoveryEvents, setDiscoveryEvents] = useState<DiscoveryEvent[]>([]);
   const queryClient = useQueryClient();
 
   // WebSocket for live incident updates
@@ -536,6 +545,36 @@ function Dashboard() {
     };
   }, [queryClient]);
 
+  // Discovery WebSocket for real-time topology updates
+  useEffect(() => {
+    const ws = new WebSocket("ws://127.0.0.1:8000/ws/discovery");
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type && msg.service_name) {
+          setDiscoveryEvents((prev) => [
+            ...prev.slice(-99),
+            {
+              type: msg.type,
+              service_name: msg.service_name,
+              detail: msg.detail || "",
+              severity: msg.severity || "info",
+              timestamp: msg.timestamp || new Date().toISOString(),
+            },
+          ]);
+          // Invalidate topology queries so TanStack Query refetches
+          queryClient.invalidateQueries({ queryKey: ["discovered-services"] });
+          queryClient.invalidateQueries({ queryKey: ["auto-graph"] });
+          queryClient.invalidateQueries({ queryKey: ["services-health"] });
+        }
+      } catch {
+        // Ignore non-JSON
+      }
+    };
+    ws.onerror = () => {};
+    return () => ws.close();
+  }, [queryClient]);
+
   const {
     data: incidents,
     isLoading,
@@ -564,6 +603,28 @@ function Dashboard() {
     queryKey: ["search", searchQuery, semanticMode],
     queryFn: () => searchKnowledgeBase(searchQuery, semanticMode),
     enabled: activeTab === "search" && searchQuery.length > 0,
+  });
+
+  // Topology queries
+  const { data: discoveredServices, isLoading: topoLoading, error: topoError } = useQuery({
+    queryKey: ["discovered-services"],
+    queryFn: fetchDiscoveredServices,
+    refetchInterval: activeTab === "topology" ? 10000 : false,
+    enabled: activeTab === "topology",
+  });
+
+  const { data: autoGraph } = useQuery({
+    queryKey: ["auto-graph"],
+    queryFn: fetchAutoGraph,
+    refetchInterval: activeTab === "topology" ? 10000 : false,
+    enabled: activeTab === "topology",
+  });
+
+  const { data: healthData } = useQuery({
+    queryKey: ["services-health"],
+    queryFn: fetchServicesHealth,
+    refetchInterval: activeTab === "topology" ? 10000 : false,
+    enabled: activeTab === "topology",
   });
 
   const { data: selectedIncident } = useQuery({
@@ -672,6 +733,18 @@ function Dashboard() {
           onClick={() => setActiveTab("search")}
         >
           🔍 Search
+        </button>
+        <button
+          className={`tab-btn ${activeTab === "topology" ? "active" : ""}`}
+          onClick={() => setActiveTab("topology")}
+        >
+          🗺️ Topology
+        </button>
+        <button
+          className={`tab-btn ${activeTab === "discovery" ? "active" : ""}`}
+          onClick={() => setActiveTab("discovery")}
+        >
+          📡 Discovery
         </button>
       </nav>
 
@@ -830,7 +903,36 @@ function Dashboard() {
             />
           )}
         </div>
+      {/* Topology Tab */}
+      {activeTab === "topology" && (
+        <ServiceTopologyMap
+          services={discoveredServices || []}
+          edges={autoGraph?.edges || []}
+          healthData={healthData || []}
+          onNodeClick={(svc) => setSelectedService(svc)}
+          isLoading={topoLoading}
+          error={topoError}
+          onRetry={() => {
+            queryClient.invalidateQueries({ queryKey: ["discovered-services"] });
+            queryClient.invalidateQueries({ queryKey: ["auto-graph"] });
+            queryClient.invalidateQueries({ queryKey: ["services-health"] });
+          }}
+        />
       )}
+
+      {selectedService && (
+        <ServiceDetailsPanel
+          service={selectedService}
+          health={healthData?.find((h) => h.service_id === selectedService.service_id)}
+          onClose={() => setSelectedService(null)}
+        />
+      )}
+
+      {/* Discovery Feed Tab */}
+      {activeTab === "discovery" && (
+        <DiscoveryEventFeed events={discoveryEvents} />
+      )}
+
     </main>
   );
 }
