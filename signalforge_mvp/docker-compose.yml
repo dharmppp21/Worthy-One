@@ -1,4 +1,31 @@
+# SignalForge — Full Stack Docker Compose
+#
+# This is the default compose file for running SignalForge locally.
+# It includes PostgreSQL, Redis, Redpanda (Kafka-compatible), the backend,
+# frontend, and an optional simulator profile.
+#
+# The backend automatically discovers other containers in the same Docker
+# network when discovery is enabled. It needs read-only access to the Docker
+# socket for container introspection.
+#
+# Quick start:
+#   docker-compose up -d                     # Start all services
+#   docker-compose --profile simulator up -d   # Start + simulator
+#   docker-compose down                        # Stop everything
+#   docker-compose down -v                     # Stop + wipe data volumes
+#
+# Health checks on postgres, redis, and redpanda ensure the backend
+# only starts after its dependencies are ready.
+#
+# For local development with live reloading, use docker-compose.override.yml.
+# For production hardening, use docker-compose.prod.yml.
+#
+#   docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
 services:
+  # ------------------------------------------------------------------
+  # PostgreSQL 16 — durable storage, Alembic migrations, pgvector
+  # ------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
     container_name: signforge-postgres
@@ -17,6 +44,9 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # ------------------------------------------------------------------
+  # Redis 7 — hot state: rolling windows, pub/sub, TTL auto-cleanup
+  # ------------------------------------------------------------------
   redis:
     image: redis:7-alpine
     container_name: signforge-redis
@@ -32,6 +62,9 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # ------------------------------------------------------------------
+  # Redpanda — Kafka-compatible event streaming (single-node for local)
+  # ------------------------------------------------------------------
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:latest
     container_name: signforge-redpanda
@@ -59,6 +92,14 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # ------------------------------------------------------------------
+  # Backend — FastAPI + auto-discovery + event processing
+  # ------------------------------------------------------------------
+  # The backend discovers containers, services, and processes.
+  # Docker socket access (read-only) enables container introspection.
+  # pid: host lets the backend see host processes for process discovery.
+  # This is a security trade-off; disable process discovery in production.
+  # ------------------------------------------------------------------
   backend:
     build:
       context: ./backend
@@ -73,6 +114,17 @@ services:
       LOG_LEVEL: INFO
       ENVIRONMENT: production
       RATE_LIMIT_RPS: "200"
+      # --- Auto-discovery settings ---
+      SIGNALFORGE_DISCOVERY_ENABLED: "true"
+      SIGNALFORGE_DISCOVERY_INTERVAL: "30"
+      SIGNALFORGE_DISCOVERY_PROVIDERS: "docker,process,config"
+    volumes:
+      # Read-only access to Docker socket for container discovery
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # Share host process namespace for process discovery
+    # SECURITY NOTE: This exposes host processes. Use only in local dev.
+    # In production, disable process discovery and use config/K8s providers.
+    pid: host
     depends_on:
       postgres:
         condition: service_healthy
@@ -82,6 +134,10 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # ------------------------------------------------------------------
+  # Frontend — React dashboard served via nginx
+  # Proxies /api/* to the backend service in the Docker network.
+  # ------------------------------------------------------------------
   frontend:
     build:
       context: ./frontend
@@ -95,6 +151,10 @@ services:
       - backend
     restart: unless-stopped
 
+  # ------------------------------------------------------------------
+  # Simulator — generates realistic traffic (optional, profile: simulator)
+  # One-off container that exits after sending all events.
+  # ------------------------------------------------------------------
   simulator:
     build:
       context: ./simulator
