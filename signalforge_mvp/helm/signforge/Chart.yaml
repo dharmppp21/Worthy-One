@@ -1,0 +1,29 @@
+apiVersion: v2
+name: signforge
+description: Auto-discovering incident management platform
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+keywords:
+  - incident-management
+  - monitoring
+  - observability
+  - auto-discovery
+
+home: https://github.com/dharmppp21/Worthy-One
+dependencies:
+  - name: postgresql
+    version: "13.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+
+  - name: redis
+    version: "18.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled
+
+  - name: kafka
+    version: "26.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: kafka.enabled
