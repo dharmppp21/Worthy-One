@@ -1,12 +1,15 @@
 """Discovery API endpoints for querying and triggering service discovery."""
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, engine
+from app.discovery.dependencies.traffic_analyzer import TrafficAnalyzer
+from app.discovery.dependencies.trace_analyzer import TraceAnalyzer
 from app.discovery.engine import DiscoveryEngine
 from app.discovery.models import DiscoveredService
 from app.discovery.registry import ServiceRegistry
@@ -17,6 +20,26 @@ router = APIRouter(prefix="/services", tags=["discovery"])
 # Module-level engine and registry (created once per app lifetime)
 _discovery_engine: Optional[DiscoveryEngine] = None
 _service_registry: Optional[ServiceRegistry] = None
+
+
+# ------------------------------------------------------------------
+# Pydantic models for debug endpoints
+# ------------------------------------------------------------------
+
+class TrafficDebugRequest(BaseModel):
+    log_lines: List[str] = Field(default_factory=list, description="HTTP log lines to analyze")
+    log_format: str = Field(default="auto", description="Log format: auto, nginx_combined, envoy, json")
+
+
+class TraceDebugRequest(BaseModel):
+    raw_traces: List[Dict[str, Any]] = Field(default_factory=list, description="Raw trace JSON objects")
+    backend_type: str = Field(default="mock", description="Trace backend type: jaeger, zipkin, mock")
+
+
+class DependencyDebugResponse(BaseModel):
+    dependencies: List[Dict[str, Any]] = Field(default_factory=list)
+    count: int = 0
+    source: str = ""
 
 
 def get_db() -> Session:
@@ -66,3 +89,51 @@ async def trigger_discovery(
     """Trigger an on-demand discovery run and return results."""
     discovered = await engine.run_discovery()
     return [svc.model_dump() for svc in discovered]
+
+
+# ------------------------------------------------------------------
+# Debug endpoints for dependency analyzers
+# ------------------------------------------------------------------
+
+@router.post("/dependencies/traffic")
+async def debug_traffic_analyzer(
+    request: TrafficDebugRequest,
+    db: Session = Depends(get_db),
+) -> DependencyDebugResponse:
+    """Debug endpoint: analyze HTTP traffic logs and return inferred dependencies.
+
+    Accepts raw log lines and runs the TrafficAnalyzer against them.
+    """
+    registry = ServiceRegistry(db_session=db)
+    analyzer = TrafficAnalyzer(
+        registry=registry,
+        log_format=request.log_format,
+    )
+    deps = await analyzer.analyze(log_lines=request.log_lines)
+    return DependencyDebugResponse(
+        dependencies=[dep.model_dump() for dep in deps],
+        count=len(deps),
+        source="traffic_logs",
+    )
+
+
+@router.post("/dependencies/traces")
+async def debug_trace_analyzer(
+    request: TraceDebugRequest,
+    db: Session = Depends(get_db),
+) -> DependencyDebugResponse:
+    """Debug endpoint: analyze distributed trace data and return inferred dependencies.
+
+    Accepts raw trace JSON objects and runs the TraceAnalyzer against them.
+    """
+    registry = ServiceRegistry(db_session=db)
+    analyzer = TraceAnalyzer(
+        registry=registry,
+        backend_type=request.backend_type,
+    )
+    deps = await analyzer.analyze(raw_traces=request.raw_traces)
+    return DependencyDebugResponse(
+        dependencies=[dep.model_dump() for dep in deps],
+        count=len(deps),
+        source="distributed_tracing",
+    )
