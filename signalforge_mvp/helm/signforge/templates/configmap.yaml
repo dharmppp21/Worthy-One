@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "signforge.fullname" . }}-config
+  labels:
+    {{- include "signforge.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    {{- if .Values.postgresql.enabled }}
+    database_url: {{ include "signforge.databaseUrl" . | quote }}
+    {{- end }}
+    {{- if .Values.redis.enabled }}
+    redis_url: {{ include "signforge.redisUrl" . | quote }}
+    {{- end }}
+    {{- if .Values.kafka.enabled }}
+    kafka_brokers: {{ include "signforge.kafkaBrokers" . | quote }}
+    {{- end }}
+    {{- if .Values.discovery.enabled }}
+    discovery:
+      enabled: true
+      interval: {{ .Values.discovery.interval }}
+      providers:
+        {{- range .Values.discovery.providers }}
+        - {{ . | quote }}
+        {{- end }}
+      kubernetes:
+        namespace: {{ .Values.discovery.kubernetes.namespace | quote }}
+        cluster_role: {{ .Values.discovery.kubernetes.clusterRole }}
+    {{- end }}
+    {{- range $key, $value := .Values.config }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}

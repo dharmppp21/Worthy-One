@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "signforge.fullname" . }}
+  labels:
+    {{- include "signforge.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.hpa.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "signforge.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "signforge.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "signforge.serviceAccountName" . }}
+      securityContext:
+        {}
+        # fsGroup: 2000
+      {{- if .Values.initContainers.migrations.enabled }}
+      initContainers:
+        - name: migrations
+          image: "{{ .Values.initContainers.migrations.image | default (printf "%s:%s" .Values.image.repository .Values.image.tag) }}"
+          command:
+            - "alembic"
+            - "upgrade"
+            - "head"
+          envFrom:
+            - configMapRef:
+                name: {{ include "signforge.fullname" . }}-env
+          env:
+            - name: DATABASE_URL
+              value: {{ include "signforge.databaseUrl" . | quote }}
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {}
+            # capabilities:
+            #   drop:
+            #     - ALL
+            # readOnlyRootFilesystem: true
+            # runAsNonRoot: true
+            # runAsUser: 1000
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: {{ include "signforge.fullname" . }}-env
+          env:
+            - name: DATABASE_URL
+              value: {{ include "signforge.databaseUrl" . | quote }}
+            - name: REDIS_URL
+              value: {{ include "signforge.redisUrl" . | quote }}
+            {{- if .Values.kafka.enabled }}
+            - name: KAFKA_BROKERS
+              value: {{ include "signforge.kafkaBrokers" . | quote }}
+            {{- end }}
+            {{- if .Values.secrets.create }}
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "signforge.fullname" . }}-secrets
+                  key: apiKey
+            {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "signforge.fullname" . }}-config
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
