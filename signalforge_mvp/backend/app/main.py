@@ -19,6 +19,7 @@ from app.routers import (
     websocket,
 )
 from app.routers import discovery as discovery_router
+from app.routers import discovery_ws
 from app.database import DATABASE_URL, SessionLocal
 from app.services.kafka_consumer_worker import start_consumer_worker
 
@@ -95,6 +96,7 @@ def create_app() -> FastAPI:
     app.include_router(ai_triage.router)
     app.include_router(websocket.router)
     app.include_router(discovery_router.router)
+    app.include_router(discovery_ws.router)
 
     # Start Kafka consumer worker in background thread
     start_consumer_worker()
@@ -108,6 +110,7 @@ def create_app() -> FastAPI:
         try:
             registry = ServiceRegistry(db_session=db_session)
             engine = DiscoveryEngine(registry=registry)
+            engine.set_publisher(discovery_ws.publisher)
             providers = configurator.instantiate_providers()
             for provider in providers:
                 engine.register_provider(provider)
@@ -133,6 +136,7 @@ def create_app() -> FastAPI:
                 registry=registry,
                 dep_registry=dep_registry,
             )
+            graph_builder.set_publisher(discovery_ws.publisher)
             set_graph_builder(graph_builder)
             graph_builder.start_background_build(interval_seconds=60)
 

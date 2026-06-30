@@ -39,11 +39,12 @@ def registry(db_session):
 # ------------------------------------------------------------------
 
 def test_register_new_service(registry, db_session):
-    """register_service should insert a new record and return its ID."""
+    """register_service should insert a new record and return (id, is_new)."""
     svc = DiscoveredService(service_name="web", host="10.0.0.1")
-    sid = registry.register_service(svc)
+    sid, is_new = registry.register_service(svc)
     assert sid is not None
     assert len(sid) == 36  # UUID length
+    assert is_new is True
 
     # Verify DB state
     db_obj = db_session.query(DiscoveredServiceDB).filter_by(service_id=sid).first()
@@ -58,14 +59,16 @@ def test_register_existing_service_updates(registry, db_session):
     svc1 = DiscoveredService(
         service_name="api", host="10.0.0.2", service_type="http", endpoints=["http://10.0.0.2:80"]
     )
-    sid1 = registry.register_service(svc1)
+    sid1, is_new1 = registry.register_service(svc1)
 
     svc2 = DiscoveredService(
         service_name="api", host="10.0.0.2", service_type="grpc", endpoints=["grpc://10.0.0.2:50051"]
     )
-    sid2 = registry.register_service(svc2)
+    sid2, is_new2 = registry.register_service(svc2)
 
     assert sid1 == sid2, "Same (name, host) should produce the same service_id"
+    assert is_new1 is True
+    assert is_new2 is False
 
     # DB should have only one row
     count = db_session.query(DiscoveredServiceDB).filter_by(service_name="api", host="10.0.0.2").count()
@@ -79,7 +82,7 @@ def test_register_existing_service_updates(registry, db_session):
 def test_get_service(registry):
     """get_service should return the correct service or None."""
     svc = DiscoveredService(service_name="db", host="10.0.0.3")
-    sid = registry.register_service(svc)
+    sid, _ = registry.register_service(svc)
 
     fetched = registry.get_service(sid)
     assert fetched is not None
@@ -119,7 +122,7 @@ def test_list_services(registry, db_session):
 def test_update_heartbeat(registry):
     """update_heartbeat should refresh timestamps."""
     svc = DiscoveredService(service_name="worker", host="10.0.0.6")
-    sid = registry.register_service(svc)
+    sid, _ = registry.register_service(svc)
 
     # Small sleep to ensure timestamp changes
     time.sleep(0.01)
@@ -140,12 +143,12 @@ def test_update_heartbeat_not_found(registry):
 # ------------------------------------------------------------------
 
 def test_remove_stale_services(registry, db_session):
-    """remove_stale_services should mark old services inactive."""
+    """remove_stale_services should mark old services inactive and return removed list."""
     now = datetime.now(timezone.utc)
     old = now - timedelta(seconds=300)
 
     svc = DiscoveredService(service_name="stale", host="10.0.0.7")
-    sid = registry.register_service(svc)
+    sid, _ = registry.register_service(svc)
 
     # Manually backdate the heartbeat
     db_obj = db_session.query(DiscoveredServiceDB).filter_by(service_id=sid).first()
@@ -154,7 +157,7 @@ def test_remove_stale_services(registry, db_session):
     db_session.commit()
 
     removed = registry.remove_stale_services(timeout_seconds=120)
-    assert removed == 1
+    assert removed == [(sid, "stale")]
 
     db_obj = db_session.query(DiscoveredServiceDB).filter_by(service_id=sid).first()
     assert db_obj.is_active is False
@@ -164,12 +167,12 @@ def test_remove_stale_services(registry, db_session):
 
 
 def test_remove_stale_services_none(registry):
-    """remove_stale_services should return 0 when nothing is stale."""
+    """remove_stale_services should return empty list when nothing is stale."""
     svc = DiscoveredService(service_name="fresh", host="10.0.0.8")
     registry.register_service(svc)
 
     removed = registry.remove_stale_services(timeout_seconds=120)
-    assert removed == 0
+    assert removed == []
 
     active = registry.list_services(active_only=True)
     assert len(active) == 1
@@ -182,7 +185,7 @@ def test_remove_stale_services_none(registry):
 def test_cache_syncs_on_read(registry, db_session):
     """Modifying the DB directly should reflect in cache after a read."""
     svc = DiscoveredService(service_name="cache-test", host="10.0.0.9")
-    sid = registry.register_service(svc)
+    sid, _ = registry.register_service(svc)
 
     # Direct DB update
     db_obj = db_session.query(DiscoveredServiceDB).filter_by(service_id=sid).first()
