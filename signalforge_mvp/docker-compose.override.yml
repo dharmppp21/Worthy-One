@@ -1,0 +1,43 @@
+# SignalForge — Local Development Override
+#
+# Docker Compose automatically merges this file with docker-compose.yml
+# when present in the same directory. This override is designed for
+# active development with live reloading and direct debugging access.
+#
+# Usage: docker-compose up -d  (this file is picked up automatically)
+#        docker-compose -f docker-compose.yml -f docker-compose.override.yml up -d
+#
+# What this override changes:
+#   - Mounts backend source code for live reload (uvicorn --reload)
+#   - Mounts frontend source code for Vite dev server
+#   - Exposes backend directly on port 8000 (no nginx proxy)
+#   - Sets ENVIRONMENT=development and LOG_LEVEL=DEBUG
+#   - Disables the nginx frontend container (use npm run dev directly)
+#   - Removes resource limits for faster build/iteration
+
+services:
+  backend:
+    volumes:
+      # Live reload: source code changes restart uvicorn automatically
+      - ./backend:/app
+    environment:
+      ENVIRONMENT: development
+      LOG_LEVEL: DEBUG
+      # Use SQLite for fast iteration (no postgres dependency during dev)
+      # Override via .env if you want to test against PostgreSQL locally
+      DATABASE_URL: "sqlite:///./dev.db"
+    # Run uvicorn with reload for hot-restart on code changes
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    # No need for pid: host in dev mode; discovery can use docker provider only
+    pid: ""
+
+  # ------------------------------------------------------------------
+  # Disable the nginx frontend in dev mode.
+  # Use npm run dev directly in ./frontend for Vite HMR.
+  # ------------------------------------------------------------------
+  frontend:
+    profiles:
+      - disabled
+    # Override the default service to prevent it from starting
+    deploy:
+      replicas: 0
