@@ -32,6 +32,9 @@ from app.discovery.engine import DiscoveryEngine
 from app.discovery.registry import ServiceRegistry
 from app.routers.discovery import set_discovery_engine, set_graph_builder
 
+from app.discovery.correlation import EventServiceCorrelator
+from app.services.event_processor import event_processor
+
 from alembic.config import Config
 from alembic import command
 
@@ -132,6 +135,12 @@ def create_app() -> FastAPI:
             )
             set_graph_builder(graph_builder)
             graph_builder.start_background_build(interval_seconds=60)
+
+            # ------------------------------------------------------------------
+            # Event Correlator Setup
+            # ------------------------------------------------------------------
+            correlator = EventServiceCorrelator(registry=registry)
+            event_processor.set_correlator(correlator)
 
         except Exception as exc:
             from app.logging_config import get_logger
