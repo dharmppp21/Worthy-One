@@ -259,6 +259,14 @@ git push origin main
 - Correlation metadata (strategy, confidence, matched_field) is persisted with the event.
 - Events that cannot be correlated are flagged as `uncorrelated` and can be queried via `GET /events/uncorrelated`.
 
+### Real-Time Discovery Events (`app/routers/discovery_ws.py`)
+- `DiscoveryEventPublisher` is a singleton that broadcasts discovery events to WebSocket clients.
+- Endpoint: `GET /ws/discovery` — accepts up to 100 concurrent connections.
+- Events published: `service_discovered`, `service_removed`, `service_health_changed`, `dependency_detected`, `dependency_removed`.
+- Health change tracking uses `_health_cache` to avoid spamming duplicate events.
+- Auth: supports `api_key` query param or `X-API-Key` header; falls back to `default` tenant.
+- Frontend: React Flow topology map listens to these events and updates nodes/edges in real-time.
+
 ### Helm Chart (`helm/signforge/`)
 - Chart depends on Bitnami's PostgreSQL, Redis, and Kafka subcharts (all optional).
 - Each dependency is conditionally enabled via `postgresql.enabled`, `redis.enabled`, `kafka.enabled`.
@@ -335,4 +343,4 @@ git log --oneline -5
 
 ---
 
-**Last updated:** 2026-07-03 — Added Docker Compose overrides, production hardening, and deployment checklist.
+**Last updated:** 2026-07-05 — Added WebSocket real-time discovery events and live topology updates.
