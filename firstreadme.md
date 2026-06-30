@@ -43,6 +43,14 @@ Worthy One/
 │   │       ├── values.yaml
 │   │       ├── templates/      ← K8s manifest templates
 │   │       └── README.md
+│   ├── terraform/              ← Terraform modules for AWS
+│   │   ├── modules/signforge/  ← Root module
+│   │   │   ├── modules/      ← Sub-modules (vpc, eks, ecs, rds, etc.)
+│   │   │   ├── variables.tf
+│   │   │   ├── main.tf
+│   │   │   ├── outputs.tf
+│   │   │   └── versions.tf
+│   │   └── examples/         ← EKS complete and ECS simple examples
 │   ├── frontend/               ← React/Vite frontend
 │   ├── simulator/              ← Traffic simulator
 │   ├── samples/                ← Event JSON samples
@@ -256,6 +264,20 @@ git push origin main
 - Template helpers in `_helpers.tpl` construct `DATABASE_URL`, `REDIS_URL`, and `KAFKA_BROKERS` from subchart service names.
 - `values.yaml` provides production-ready defaults with configurable discovery providers, resources, and scheduling.
 
+### Terraform Modules (`terraform/modules/signforge/`)
+- Root module orchestrates sub-modules via `count` based on boolean flags (`enable_eks`, `enable_rds`, etc.).
+- `vpc/` creates a new VPC with public/private subnets, NAT, and IGW — or uses data sources if `vpc_id` is provided.
+- `security_groups/` creates least-privilege SGs: backend ingress from ALB, DB ingress from backend, Redis from backend, Kafka from backend.
+- `iam/` creates ECS execution/task roles and EKS IRSA role with minimal permissions.
+- `rds/` creates PostgreSQL with Secrets Manager password storage, Multi-AZ, and encryption at rest.
+- `elasticache/` creates a Redis cluster in private subnets.
+- `msk/` creates a Managed Kafka cluster (optional).
+- `eks/` uses the official `terraform-aws-modules/eks/aws` module with IRSA and managed node groups.
+- `ecs/` creates a Fargate cluster with task definitions, CloudWatch Logs, and service.
+- `alb/` creates an Application Load Balancer with health checks on `/health`.
+- `cloudfront/` creates a CloudFront distribution with S3 origin for frontend and ALB origin for API.
+- Examples in `terraform/examples/` provide `eks-complete` (production) and `ecs-simple` (dev) configurations.
+
 ### Tests (`tests/`)
 - Use `pytest.mark.asyncio` for async tests.
 - Mock external APIs and system calls (psutil, docker, kubernetes, boto3, requests).
@@ -303,4 +325,4 @@ git log --oneline -5
 
 ---
 
-**Last updated:** 2026-06-30 — Added correlation engine and Helm chart documentation.
+**Last updated:** 2026-06-30 — Added Terraform modules and AWS architecture documentation.
