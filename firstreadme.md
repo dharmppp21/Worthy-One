@@ -37,6 +37,12 @@ Worthy One/
 │   │   ├── alembic/            ← Database migrations
 │   │   ├── requirements.txt    ← Python dependencies
 │   │   └── pyproject.toml      ← pytest config
+│   ├── helm/                   ← Kubernetes Helm chart
+│   │   └── signforge/          ← SignalForge Helm chart
+│   │       ├── Chart.yaml
+│   │       ├── values.yaml
+│   │       ├── templates/      ← K8s manifest templates
+│   │       └── README.md
 │   ├── frontend/               ← React/Vite frontend
 │   ├── simulator/              ← Traffic simulator
 │   ├── samples/                ← Event JSON samples
@@ -242,6 +248,14 @@ git push origin main
 - Correlation metadata (strategy, confidence, matched_field) is persisted with the event.
 - Events that cannot be correlated are flagged as `uncorrelated` and can be queried via `GET /events/uncorrelated`.
 
+### Helm Chart (`helm/signforge/`)
+- Chart depends on Bitnami's PostgreSQL, Redis, and Kafka subcharts (all optional).
+- Each dependency is conditionally enabled via `postgresql.enabled`, `redis.enabled`, `kafka.enabled`.
+- `rbac.yaml` creates either a ClusterRole (cross-namespace discovery) or Role (single-namespace) based on `discovery.kubernetes.clusterRole`.
+- `deployment.yaml` includes an init container for `alembic upgrade head` database migrations.
+- Template helpers in `_helpers.tpl` construct `DATABASE_URL`, `REDIS_URL`, and `KAFKA_BROKERS` from subchart service names.
+- `values.yaml` provides production-ready defaults with configurable discovery providers, resources, and scheduling.
+
 ### Tests (`tests/`)
 - Use `pytest.mark.asyncio` for async tests.
 - Mock external APIs and system calls (psutil, docker, kubernetes, boto3, requests).
@@ -289,4 +303,4 @@ git log --oneline -5
 
 ---
 
-**Last updated:** 2026-06-30 — Added correlation engine documentation.
+**Last updated:** 2026-06-30 — Added correlation engine and Helm chart documentation.
