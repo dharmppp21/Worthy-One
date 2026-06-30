@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: |
+          cd signalforge_mvp/backend
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov
+
+      - name: Run unit tests
+        run: |
+          cd signalforge_mvp/backend
+          python -m pytest tests/ -v --ignore=tests/integration -x
+
+      - name: Run integration tests
+        run: |
+          cd signalforge_mvp/backend
+          python -m pytest tests/integration/ -v -x
+
+      - name: Run all tests with coverage
+        run: |
+          cd signalforge_mvp/backend
+          python -m pytest tests/ -v --cov=app --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: signalforge_mvp/backend/coverage.xml
+          fail_ci_if_error: false

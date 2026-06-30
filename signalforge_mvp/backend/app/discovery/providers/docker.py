@@ -170,6 +170,7 @@ class DockerDiscoveryProvider(ServiceDiscoveryProvider):
                     "networks": list(networks.keys()),
                     "command": config.get("Cmd") or [],
                     "created_at": attrs.get("Created"),
+                    "pid": attrs.get("State", {}).get("Pid"),
                 }
                 metadata = {k: v for k, v in metadata.items() if v is not None}
 

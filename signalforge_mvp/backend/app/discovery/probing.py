@@ -416,9 +416,10 @@ class ServiceProber:
 
             # Persist updated health status
             try:
+                self._registry.update_health_status(
+                    service.service_id, new_status
+                )
                 self._registry.update_heartbeat(service.service_id)
-                # Also update health_status field in DB if we can
-                # (Registry handles this via the DB model update)
             except ValueError:
                 pass
 
