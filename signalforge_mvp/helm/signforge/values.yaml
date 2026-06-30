@@ -1,0 +1,130 @@
+# Default values for signforge.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/dharmppp21/signforge
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8000
+
+# Resource limits and requests
+resources: {}
+  # limits:
+  #   cpu: 500m
+  #   memory: 512Mi
+  # requests:
+  #   cpu: 250m
+  #   memory: 256Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Service Account
+serviceAccount:
+  create: true
+  name: signforge
+
+# RBAC
+rbac:
+  create: true
+
+# Ingress
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations:
+    {}
+    # nginx.ingress.kubernetes.io/rewrite-target: /
+  hosts:
+    - host: signforge.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  # - secretName: signforge-tls
+  #   hosts:
+  #     - signforge.local
+
+# Horizontal Pod Autoscaler
+hpa:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# PostgreSQL dependency
+postgresql:
+  enabled: true
+  auth:
+    database: signforge
+    username: signforge
+    password: signforge
+  primary:
+    persistence:
+      enabled: true
+      size: 8Gi
+
+# Redis dependency
+redis:
+  enabled: true
+  auth:
+    enabled: false
+  architecture: standalone
+  master:
+    persistence:
+      enabled: true
+      size: 4Gi
+
+# Kafka dependency
+kafka:
+  enabled: false
+  replicaCount: 1
+  auth:
+    enabled: false
+  persistence:
+    enabled: true
+    size: 8Gi
+
+# Discovery settings
+discovery:
+  enabled: true
+  interval: 30
+  providers: ["kubernetes", "docker", "process", "config"]
+  kubernetes:
+    namespace: ""
+    clusterRole: true
+
+# Extra environment variables
+env: {}
+  # Example:
+  # LOG_LEVEL: debug
+  # EXTRA_VAR: value
+
+# Extra config file entries merged into generated config.yaml
+config: {}
+  # Example:
+  # custom_setting: value
+
+# Secrets
+secrets:
+  # Set to true to create a Secret from values.yaml
+  create: false
+  # Only used if create is true
+  apiKey: ""
+  # Base64 encoded values (if using existing secrets)
+  # existingSecretName: ""
+
+# Init containers
+initContainers:
+  migrations:
+    enabled: true
+    image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+    command: ["alembic", "upgrade", "head"]
