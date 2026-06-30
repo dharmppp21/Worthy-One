@@ -267,6 +267,15 @@ git push origin main
 - Auth: supports `api_key` query param or `X-API-Key` header; falls back to `default` tenant.
 - Frontend: React Flow topology map listens to these events and updates nodes/edges in real-time.
 
+### Health Probing & Auto-Classification (`app/discovery/probing.py`)
+- `ServiceProber` probes discovered services via HTTP (`/health`, `/healthz`, `/ready`, etc.) and TCP connections.
+- HTTP probes: 5s timeout, follow redirects, JSON status parsing. TCP probes: 3s timeout.
+- Protocol detection: `http`, `http2`, `grpc`, `raw_tcp` via response analysis and port heuristics.
+- Service classification priority: K8s labels → Docker image keywords → process names → HTTP framework detection (Spring Boot, Express, FastAPI, etc.) → known port mappings → Content-Type inference (`html` → `web`, `json` → `api`).
+- `probe_all_services()` runs probes in parallel with `asyncio.gather`.
+- Background task runs every 15 seconds. Health changes publish WebSocket events.
+- 30 tests covering all probe types, protocol detection, classification logic, parallel execution, and background scheduling.
+
 ### Helm Chart (`helm/signforge/`)
 - Chart depends on Bitnami's PostgreSQL, Redis, and Kafka subcharts (all optional).
 - Each dependency is conditionally enabled via `postgresql.enabled`, `redis.enabled`, `kafka.enabled`.
@@ -343,4 +352,4 @@ git log --oneline -5
 
 ---
 
-**Last updated:** 2026-07-05 — Added WebSocket real-time discovery events and live topology updates.
+**Last updated:** 2026-07-06 — Added service health probing, auto-classification, and infrastructure severity boost.
