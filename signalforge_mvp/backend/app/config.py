@@ -26,7 +26,7 @@ class Config:
     # Application
     ENVIRONMENT: str = os.environ.get("ENVIRONMENT", "development")
     LOG_LEVEL: str = os.environ.get("LOG_LEVEL", "INFO")
-    RATE_LIMIT_RPS: int = int(os.environ.get("RATE_LIMIT_RPS", "100"))
+    RATE_LIMIT_RPS: int = int(os.environ.get("RATE_LIMIT_RPS", "1000"))
     RATE_LIMIT_WINDOW_SECONDS: int = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
 
     @classmethod
