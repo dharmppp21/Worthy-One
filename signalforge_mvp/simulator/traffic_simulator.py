@@ -44,7 +44,8 @@ def new_event_id(prefix: str) -> str:
 
 
 def send_event(payload: dict) -> None:
-    response = requests.post(API_URL, json=payload, timeout=5)
+    headers = {"X-API-Key": "sf-api-key-demo"}
+    response = requests.post(API_URL, json=payload, headers=headers, timeout=5)
     response.raise_for_status()
 
 
