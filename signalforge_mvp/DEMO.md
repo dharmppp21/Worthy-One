@@ -282,7 +282,34 @@ Response (excerpt, mock provider):
 
 ---
 
-### Step 8: Search (30 seconds)
+### Step 8: Auto-discovery (1 minute)
+
+> **Say:** "Before we wrap up, let me show you the auto-discovery engine."
+
+```powershell
+# Check discovered services
+curl -H "X-API-Key: sf-api-key-demo" http://localhost:8000/services/discovered
+
+# Check service health
+curl -H "X-API-API-Key: sf-api-key-demo" http://localhost:8000/services/health
+
+# Check dependency graph
+curl -H "X-API-Key: sf-api-key-demo" http://localhost:8000/services/dependencies
+```
+
+> **Say:** "The system discovered all 5 services automatically. Each has a
+> health status, a classified type — api, database, cache — and a list of
+> endpoints. The dependency graph shows checkout-service depends on
+> payment-service, inventory-service, and notification-service. This is all
+> automatic — no manual service registration."
+
+> **Say:** "You can also watch real-time discovery events on the WebSocket
+> at `ws://localhost:8000/ws/discovery`. New services appear, health
+> changes flash, and dependency edges are drawn as they're detected."
+
+---
+
+### Step 9: Search (30 seconds)
 
 > **Say:** "We can search across incidents and runbooks by keyword."
 
@@ -305,7 +332,13 @@ curl -H "X-API-Key: sf-api-key-demo" \
 > traceable evidence, retrieved the runbook, and suggested AI-generated actions.
 > The entire pipeline is automatic: event ingestion, anomaly detection, incident
 > creation, evidence gathering, root cause ranking, and operational memory
-> retrieval. The engineer just has to read the incident and follow the runbook."
+> retrieval. The engineer just has to read the incident and follow the runbook.
+>
+> And we never had to manually register a single service. The auto-discovery
+> engine found the checkout-service, payment-service, inventory-service, and
+> notification-service automatically. It probed their health, classified their
+> types, and detected their dependencies. When the bad event arrived, it was
+> automatically correlated to notification-service without any manual tagging."
 
 ---
 
@@ -364,4 +397,6 @@ anomaly evidence, and cascading impact. 2 runbooks ready for retrieval.
 - **Tell the story, not the tech** — "A bad deploy caused a cascade. The system
 detected it, created an incident, found the root cause, and retrieved the runbook."
 - **Mention the numbers** — "95% error rate, 2041ms p95, 10 failed traces, score 85."
+- **Highlight auto-discovery** — "The system found all 5 services, probed their health, classified their types, and detected dependencies — all automatically."
+- **Show the WebSocket** — Open `ws://localhost:8000/ws/discovery` in a web client to see real-time discovery events."
 

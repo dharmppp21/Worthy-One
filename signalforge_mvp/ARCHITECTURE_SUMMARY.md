@@ -11,7 +11,7 @@ telemetry events (metrics, logs, traces, deployments), detects anomalies using
 rolling-window analysis, creates incidents with structured evidence, and provides
 a React dashboard for triage, root-cause analysis, and operational memory.
 
-**In one sentence:** "PagerDuty + DataDog + an AI assistant, built in 30 days."
+**In one sentence:** "PagerDuty + DataDog + an AI assistant, built in 49 days with auto-discovery across Docker, K8s, and cloud."
 
 ---
 
@@ -36,6 +36,13 @@ a React dashboard for triage, root-cause analysis, and operational memory.
                     │      React Dashboard      │
                     │  (WebSocket live updates)  │
                     └─────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│                    Auto-Discovery Engine                  │
+│  Docker → K8s → Process → Config → Cloud                 │
+│  → ServiceRegistry → HealthProber → EventCorrelator      │
+│  → DependencyGraphBuilder → WebSocket Publisher            │
+└─────────────────────────────────────────────────────────┘
 ```
 
 **Why 3 layers?** Each layer has a different consistency model and failure mode.
@@ -49,17 +56,20 @@ source of truth).
 
 | Step | What Happens | Technology | Timing |
 |------|-------------|------------|--------|
-| 1 | Simulator sends metric event | Python script | — |
-| 2 | API validates, overrides tenant_id, publishes to Kafka | FastAPI + Pydantic | ~15ms |
-| 3 | API returns 202 Accepted | HTTP response | ~15ms total |
-| 4 | Consumer worker pulls event from topic | Kafka consumer | ~50ms lag |
-| 5 | EventProcessor stores in PostgreSQL | SQLAlchemy | ~5ms |
-| 6 | EventProcessor pushes to Redis window | Redis LPUSH | ~1ms |
-| 7 | Anomaly detector reads window | Redis LRANGE | ~1ms |
-| 8 | If 20+ events and error rate ≥ 50%, flag critical | Python math | ~1ms |
-| 9 | Incident engine creates incident with evidence | SQLAlchemy | ~5ms |
-| 10 | WebSocket broadcasts to dashboard | Redis pub/sub | ~1ms |
-| 11 | Dashboard flashes new incident card | React + TanStack Query | ~1ms |
+| 1 | Auto-discovery scans containers, pods, processes, cloud | Docker SDK, K8s API, psutil | ~2s |
+| 2 | Health prober checks endpoints, classifies service type | httpx, asyncio | ~200ms |
+| 3 | Simulator sends metric event | Python script | — |
+| 4 | API validates, overrides tenant_id, publishes to Kafka | FastAPI + Pydantic | ~15ms |
+| 5 | API returns 202 Accepted | HTTP response | ~15ms total |
+| 6 | Consumer worker pulls event from topic | Kafka consumer | ~50ms lag |
+| 7 | EventProcessor stores in PostgreSQL | SQLAlchemy | ~5ms |
+| 8 | EventProcessor pushes to Redis window | Redis LPUSH | ~1ms |
+| 9 | Event correlator matches event to discovered service | In-memory registry | <1ms |
+| 10 | Anomaly detector reads window | Redis LRANGE | ~1ms |
+| 11 | If 20+ events and error rate ≥ 50%, flag critical | Python math | ~1ms |
+| 12 | Incident engine creates incident with evidence | SQLAlchemy | ~5ms |
+| 13 | WebSocket broadcasts to dashboard | Redis pub/sub | ~1ms |
+| 14 | Dashboard flashes new incident card | React + TanStack Query | ~1ms |
 
 **Total detection delay:** ~784ms from first bad event to incident creation
 (20 events at 500ms intervals = 10s, but detection runs after each event).
@@ -80,6 +90,9 @@ source of truth).
 | Rate limiting | In-memory sliding window | 100 RPS per IP, zero external dependency. |
 | Logging | Structured key=value | Queryable by event_id/request_id. JSON-ready for CloudWatch. |
 | Deployment | Docker Compose + ECS Fargate | Local: one command. AWS: serverless containers. |
+| **Auto-discovery** | Pluggable providers (Docker, K8s, Process, Config, Cloud) | Environment auto-detection with zero manual config. Concurrent provider execution. |
+| **Health probing** | HTTP/TCP probes with 8 endpoint patterns | Auto-detects `/health`, `/healthz`, `/actuator/health`. Classifies service type via 7-layer heuristics. |
+| **Event correlation** | 7-strategy matching engine | Matches events to services by name, IP, container ID, pod name, process ID, trace context. Confidence scoring. |
 
 ---
 
@@ -133,14 +146,17 @@ Each step is independent. No big-bang migration required.
 
 ## Project Stats
 
-- **30 days** of development
-- **57 tests**, all passing in <2 seconds
-- **40+ Python modules** in backend
+- **49 days** of development
+- **341 tests**, all passing in <3 seconds
+- **61 Python modules** in backend
 - **8-step demo** with deterministic seed script
-- **12 design tradeoffs** documented
+- **15 design tradeoffs** documented
 - **6 services** in Docker Compose stack
 - **7 AWS managed services** in architecture spec
 - **$130/month** dev cost, **$400/month** prod cost
+- **5 discovery providers** (Docker, K8s, Process, Config, Cloud)
+- **7 correlation strategies** with confidence scoring
+- **19 performance benchmarks** with deterministic data
 
 ---
 
@@ -171,6 +187,9 @@ signalforge_mvp/
 ├── DEMO.md                  # 8-step walkthrough with talking points
 ├── AWS_ARCHITECTURE.md      # Full AWS deployment spec
 ├── README.md                # Complete project documentation
+├── RESUME_BULLETS.md        # Copy-paste ready resume bullets
+├── INTERVIEW_AUTO_DISCOVERY.md # Interview deep dive on auto-discovery
+├── docs/ENVIRONMENTS.md       # Environment-specific discovery guide
 └── PROJECT_STATE.md         # Architecture decisions, file inventory
 ```
 
@@ -197,9 +216,10 @@ cd backend && .venv\Scripts\python.exe tests\load\run_load_tests.py
 ## One-Liner for Recruiters
 
 "SignalForge is a production-ready incident management platform for
-microservices. It ingests telemetry, detects anomalies in under 1 second,
-creates incidents with structured evidence, correlates deployments, scores
-root causes across 5 dimensions, and suggests AI-generated remediation — all
-with 57 tests, load-tested at 47 RPS, and deployable to AWS in 6
-Docker containers."
+microservices. It auto-discovers services across Docker, K8s, and cloud;
+probes their health; correlates telemetry events automatically; detects
+anomalies in under 1 second; creates incidents with structured evidence;
+correlates deployments; scores root causes across 5 dimensions; and suggests
+AI-generated remediation — all with 341 tests, load-tested at 47 RPS,
+and deployable to AWS in 6 Docker containers."
 

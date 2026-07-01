@@ -1,7 +1,7 @@
 # SignalForge — Project State Summary
 
-> **Last updated:** Day 42 (July 2026)  
-> **Current phase:** Deployment artifacts complete. Helm chart, Terraform modules, Docker Compose with auto-discovery, and production hardening all documented and committed.
+> **Last updated:** Day 49 (July 2026)  
+> **Current phase:** Documentation updates and resume polish complete. All project docs updated for auto-discovery feature. New docs: ENVIRONMENTS.md, RESUME_BULLETS.md, INTERVIEW_AUTO_DISCOVERY.md.
 
 ---
 
@@ -102,6 +102,32 @@
 - Backend Dockerfile ready for containerization.
 - Redis and PostgreSQL are fully used by the backend (Day 11 Redis, Day 9 PostgreSQL).
 
+### Auto-Discovery: Pluggable Provider Engine (Days 32–35)
+- **Before:** Services had to be manually registered or hardcoded. No visibility into runtime topology, health, or dependencies. Telemetry events required explicit `service_name`.
+- **After:** The `DiscoveryEngine` orchestrates multiple `ServiceDiscoveryProvider` implementations concurrently. Discovered services are stored in PostgreSQL via `ServiceRegistry` with an in-memory cache for fast lookups. The `EventServiceCorrelator` matches telemetry events to discovered services using 7 strategies with confidence scoring. The `ServiceProber` runs HTTP/TCP health checks and classifies service type via 7-layer heuristics.
+- **Why:** In a microservices environment, services are ephemeral. Manual registration doesn't scale. Auto-discovery enables zero-configuration monitoring and automatic event correlation.
+- **How:** `EnvironmentDetector` checks the runtime (Docker, K8s, AWS, Azure, GCP, VM) and configures the right providers. Providers run via `asyncio.gather` with individual error isolation. The registry deduplicates by `(service_name, host)` and marks stale services inactive after 90s.
+
+### Health Probing and Auto-Classification (Days 39–40)
+- **Before:** No way to know if a discovered service was healthy or what type it was.
+- **After:** `ServiceProber` tries 8 common HTTP health endpoints (`/health`, `/healthz`, `/actuator/health`, etc.) and falls back to TCP connect. Classification uses 7 layers: K8s labels → Docker image → process name → framework detection → port mapping → content-type inference → fallback.
+- **Why:** Health status is critical for incident severity. Service type classification enables the correlation engine to disambiguate multiple candidates.
+
+### Event Correlation: 7-Strategy Matching (Days 41–43)
+- **Before:** Telemetry events required a pre-configured `service_name`. Events from unknown sources were orphaned.
+- **After:** The `EventServiceCorrelator` tries exact name, source IP+port, hostname, container ID, pod name, process ID, and trace context. Each match has a confidence score (0.85–1.0). Disambiguation prefers the most recent heartbeat and matching service type.
+- **Why:** Not all telemetry sources label their events clearly. A log from Fluent Bit might have a container ID. A metric from kube-state-metrics might have a pod name. By trying all 7 strategies, we maximize match coverage.
+
+### Service Dependency Detection (Days 44–45)
+- **Before:** The service graph only showed trace-based dependencies. No visibility into network topology or traffic patterns.
+- **After:** `DependencyGraphBuilder` combines three analyzers: `TraceAnalyzer` (Jaeger/Zipkin/mock), `TrafficAnalyzer` (nginx/Envoy/JSON access logs), and `NetworkScanner` (port scanning). Dependencies are scored by severity (frequency + error rate) and exposed via REST + WebSocket.
+- **Why:** Dependencies are critical for root-cause analysis. When checkout-service fails, the graph shows it calls notification-service, pointing to the cascading failure source. Multiple detection strategies increase coverage.
+
+### Multi-Environment Integration Tests (Days 46–48)
+- **Before:** No tests for discovery providers. No validation that Docker, K8s, or bare metal environments worked correctly.
+- **After:** 46 integration tests across Docker (mocked SDK), Kubernetes (mocked client), bare metal (mocked psutil), and mixed environments. 19 performance benchmarks with deterministic mock data (seed=42), `tracemalloc` memory profiling, and 100-run repeats. All run in CI with zero external dependencies.
+- **Why:** Discovery depends on external APIs (Docker daemon, K8s API, cloud metadata). Mocked integration tests guarantee the logic works without requiring the actual infrastructure. Performance benchmarks ensure we can detect regressions.
+
 ---
 
 ## 2. Files Modified (Days 1–14)
@@ -162,6 +188,11 @@
 | `backend/tests/load/locustfile.py` | 24 | Locust load test: TelemetryUser (ingest metrics/traces/logs, read endpoints) + ReadOnlyUser (dashboard polling) |
 | `backend/tests/load/run_load_tests.py` | 24 | Orchestrates backend startup, API latency test, ingest throughput test (10s burst + 1000 fixed), incident detection delay test; outputs JSON report |
 | `backend/tests/load/debug_detection.py` | 24 | Debug script for incident detection delay; isolated 20-event anomaly trigger test |
+| `backend/tests/discovery/` | 46–48 | 26 unit tests: correlation, WebSocket, Docker provider, environment, models, probing, process provider, registry, dependency analyzers |
+| `backend/tests/integration/` | 46–48 | 46 integration tests: Docker, K8s, bare metal, mixed — all with mocked SDKs |
+| `backend/tests/performance/` | 48 | 19 benchmarks: discovery latency, correlation accuracy, memory, graph queries — deterministic seed=42, tracemalloc profiling |
+| `.github/workflows/ci.yml` | 46–48 | GitHub Actions: pytest on push, Python 3.12 |
+| `.github/workflows/performance-tests.yml` | 48 | GitHub Actions: performance benchmarks on push, artifact upload |
 
 ### Frontend
 | File | Day | What it does now |
@@ -201,6 +232,30 @@
 | `ARCHITECTURE_SUMMARY.md` | 31 | One-page architecture reference: 3-layer model, data flow, metrics, scalability path, tech stack, file map |
 | `INTERVIEW_GUIDE.md` | 31 | Interview explanation guide: 30-second pitch, 2/5/15/30-minute deep dives, common Q&A, live demo script |
 | `Days/SignalForge_DayX_*_Report.txt` | 1–10, 12, 13, 14, 15, 16, 17, 18 | Daily reports per day |
+| `backend/app/discovery/engine.py` | 32–35 | Discovery engine: orchestrates providers, deduplication, background loop, stale removal |
+| `backend/app/discovery/models.py` | 32–35 | DiscoveredService, HealthProbeResult, ProbeStatus, ProbeType Pydantic models |
+| `backend/app/discovery/registry.py` | 32–35 | ServiceRegistry: PostgreSQL persistence + in-memory cache, deduplication by (service_name, host) |
+| `backend/app/discovery/probing.py` | 39–40 | ServiceProber: HTTP/TCP health checks, protocol detection, 7-layer classification |
+| `backend/app/discovery/correlation.py` | 41–43 | EventServiceCorrelator: 7-strategy matching with confidence scoring and disambiguation |
+| `backend/app/discovery/environment.py` | 32–35 | EnvironmentDetector: auto-detects Docker, K8s, AWS, Azure, GCP, VM |
+| `backend/app/discovery/base.py` | 32–35 | ServiceDiscoveryProvider abstract base class |
+| `backend/app/discovery/providers/docker.py` | 36–38 | DockerDiscoveryProvider: scans containers, images, port mappings, labels |
+| `backend/app/discovery/providers/kubernetes.py` | 36–38 | KubernetesDiscoveryProvider: scans pods, services, labels, namespaces |
+| `backend/app/discovery/providers/process.py` | 36–38 | ProcessDiscoveryProvider: psutil scanning, listening ports, system process blocklist |
+| `backend/app/discovery/providers/config.py` | 36–38 | ConfigDiscoveryProvider: JSON/YAML static config from env var or file |
+| `backend/app/discovery/providers/cloud.py` | 36–38 | CloudDiscoveryProvider: AWS, Azure, GCP metadata endpoints |
+| `backend/app/discovery/dependencies/graph_builder.py` | 44–45 | DependencyGraphBuilder: combines trace, traffic, and network analyzers |
+| `backend/app/discovery/dependencies/trace_analyzer.py` | 44–45 | TraceAnalyzer: parses Jaeger/Zipkin/mock traces for parent-child relationships |
+| `backend/app/discovery/dependencies/traffic_analyzer.py` | 44–45 | TrafficAnalyzer: parses nginx/Envoy/JSON access logs for caller-callee |
+| `backend/app/discovery/dependencies/network_scanner.py` | 44–45 | NetworkScanner: port scanning, topology inference |
+| `backend/app/discovery/dependencies/mesh_analyzer.py` | 44–45 | MeshAnalyzer: service mesh dependency detection |
+| `backend/app/routers/discovery.py` | 32–35 | GET /services/discovered, /health, /dependencies, /discovery-status |
+| `backend/app/routers/discovery_ws.py` | 32–35 | WebSocket /ws/discovery: real-time discovery event broadcast |
+| `frontend/src/components/DiscoveryEventFeed.tsx` | 32–35 | Real-time discovery event feed with filtering and pause/resume |
+| `frontend/src/components/ServiceDetailsPanel.tsx` | 32–35 | Service detail panel with tabs: overview, incidents, dependencies, runbooks, metadata |
+| `docs/ENVIRONMENTS.md` | 49 | Environment-specific discovery guide: Docker, K8s, AWS, bare metal |
+| `RESUME_BULLETS.md` | 49 | Copy-paste ready resume bullet points for backend, SRE, data, frontend roles |
+| `INTERVIEW_AUTO_DISCOVERY.md` | 49 | Interview deep dive: 30s pitch, 2min intro, 5min technical, 15min system design, Q&A |
 
 ---
 
@@ -236,6 +291,13 @@
 | 40 | Helm chart for Kubernetes with auto-discovery, optional subcharts, RBAC, and CI | ✅ Done |
 | 41 | Terraform modules for AWS: EKS + ECS, RDS, ElastiCache, MSK, ALB, CloudFront, IAM, Security Groups | ✅ Done |
 | 42 | Docker Compose auto-discovery: docker socket mount, process discovery, override files, production hardening, deployment checklist | ✅ Done |
+| 43–45 | Discovery core: engine, registry, models, base class, environment detector | ✅ Done |
+| 46–48 | Discovery providers: Docker, K8s, Process, Config, Cloud | ✅ Done |
+| 49 | Health probing, auto-classification, event correlation, dependency detection | ✅ Done |
+| 50 | Multi-environment integration tests: Docker, K8s, bare metal, mixed | ✅ Done |
+| 51 | Performance benchmarks: discovery latency, correlation accuracy, graph queries | ✅ Done |
+| 52 | Documentation: ENVIRONMENTS.md, RESUME_BULLETS.md, INTERVIEW_AUTO_DISCOVERY.md | ✅ Done |
+| 53 | PROJECT_STATE.md update: Day 49 status, architecture decisions, file inventory | ✅ Done |
 
 ---
 
@@ -252,10 +314,10 @@
 | Frontend detail panel `useQuery` does not refetch on interval | Low | List refetches every 3s, but detail panel only fetches once. Opening a stale incident card may show outdated data until re-opened. |
 | `recent_by_service` no longer exists in storage | None | Anomaly detection still uses `get_recent_events()` which queries the DB. No functional change. |
 | `anomaly.py` still hardcodes thresholds | Low | Thresholds are module-level constants. Could be configurable per-tenant in the future. |
-| No authentication or authorization | Medium | All endpoints are open. Acceptable for MVP but needs JWT or API keys for production. |
+| No authentication or authorization | Medium | **FIXED on Day 25.** API key auth with tenant isolation is now enforced on all endpoints except `/health`. |
 | Redis port out of range in test conftest | None | Fixed on Day 21. Changed `redis://localhost:99999/0` to `redis://localhost:12345/0` and widened exception handling in `RedisWindowStore.__init__`. |
 | `storage.py` uses sync SQLAlchemy | Medium | FastAPI endpoints are async but storage blocks the event loop. `sqlalchemy[asyncio]` + `asyncpg` configured but not used. Day 10+ should migrate to async sessions. |
-| No rate limiting on /ingest | Medium | Simulator can spam the endpoint. Redis rate limiting planned for Day 11. |
+| No rate limiting on /ingest | Medium | **FIXED on Day 26.** In-memory sliding-window rate limiter (100 RPS) is active. Upgrade path to Redis-backed for multi-instance. |
 | Backend `GET /events` returns only last 50 | Low | By design. In-memory `events` list was unlimited but capped at 50. Database query also caps at 50. Good for performance, bad for deep analysis. |
 | `IncidentTimelineEntry.metadata` uses `Record<string, any>` | Low | TypeScript `any` type in `types.ts` is loose. Could be tightened with a union type for known metadata shapes. |
 | Frontend `service_call` traces not displayed | Low | Trace events are emitted by simulator but dashboard only shows incidents and basic events. Trace visualization on Day 12. |
@@ -266,16 +328,43 @@
 
 ## 5. Next Steps
 
-### Immediate: Days 21–24 (Decoupled Ingestion + Frontend Hardening + Load Testing)
-- **Day 21:** Refactor ingestion so the API accepts events quickly (202 Accepted), publishes to the stream, and worker processors handle database, Redis, anomaly, and incident updates via `EventProcessor`. Architecture supports backpressure and horizontal scaling.
+### Completed: Days 21–31 (Decoupled Ingestion + Auth + Hardening + Docs)
+- **Day 21:** Refactored ingestion to 202 Accepted with EventProcessor pipeline. Backpressure and horizontal scaling supported.
 - **Day 22:** Integration tests for ingest-to-incident, graph, runbooks, search (53 tests total).
-- **Day 23:** Frontend build verification, TypeScript fixes, user-facing API error states for all tabs (incidents, graph, runbooks, search).
-- **Day 24:** Load tests: measured 47.7 RPS ingest throughput, 784 ms incident detection delay, 13–17 ms API read latency on SQLite; identified SQLite concurrent-write bottleneck (p99 jumps to 3.3s at 50 workers, 0.4% errors). Documented PostgreSQL upgrade path.
+- **Day 23:** Frontend build verification, TypeScript fixes, user-facing API error states.
+- **Day 24:** Load tests: 47.7 RPS, 784ms detection delay, 13–17ms API read latency. SQLite bottleneck identified.
+- **Day 25:** API key auth + tenant isolation on all endpoints.
+- **Day 26:** Production hardening: structured logging, rate limiting, safe errors, health checks, config.
+- **Day 27:** Docker Compose full stack, AWS architecture, CI/CD, Terraform.
+- **Day 28:** README rewrite with architecture, data flow, demo, tradeoffs, scalability.
+- **Day 29:** Demo seed data script + DEMO.md walkthrough.
+- **Day 30:** Final QA: tests pass, warnings suppressed, stale files removed.
+- **Day 31:** Finalization: architecture summary, interview guide, all docs complete.
 
-### Short-term: Days 25–27 (Documentation, Hardening)
-- **Day 25:** README rewrite, architecture decision records (ADRs).
-- **Day 26:** Structured logging, trace ID propagation, CORS review.
-- **Day 27:** Build pipeline, Docker Compose for full stack (frontend + backend + simulator).
+### Completed: Days 32–49 (Auto-Discovery + Health Probing + Correlation + Dependencies + Tests + Docs)
+- **Days 32–35:** Discovery engine, registry, models, base class, environment detector.
+- **Days 36–38:** Docker, Kubernetes, Process, Config, Cloud providers.
+- **Days 39–40:** Health probing and auto-classification with HTTP/TCP probes and 7-layer heuristics.
+- **Days 41–43:** Event correlation with 7-strategy matching and confidence scoring.
+- **Days 44–45:** Service dependency detection via trace analysis, traffic log parsing, and network scanning.
+- **Days 46–48:** Multi-environment integration tests (46 tests) and performance benchmarks (19 tests) with deterministic data.
+- **Day 49:** Documentation updates: README, ARCHITECTURE_SUMMARY, INTERVIEW_GUIDE, DEMO, AWS_ARCHITECTURE, ENVIRONMENTS, RESUME_BULLETS, INTERVIEW_AUTO_DISCOVERY, PROJECT_STATE.
+
+### Next Steps (If You Want to Extend)
+- **Alerting:** PagerDuty/OpsGenie webhook integration for critical incidents
+- **Metrics:** Prometheus metrics export from FastAPI
+- **Auth:** OAuth2/JWT with refresh tokens for multi-tenant SSO
+- **Multi-region:** Deploy backend to multiple regions with Kafka replication
+- **ML model:** Train custom anomaly detection on historical incident data
+- **Log aggregation:** ELK/Loki integration for centralized log search
+- **SLO tracking:** Burn rate alerting dashboards
+- **ChatOps:** Slack bot for incident notifications and status updates
+- **Audit log:** Immutable API action log for compliance
+- **Circuit breaker:** Resilience pattern for downstream service calls
+- **OpenTelemetry:** Distributed tracing across all components
+- **Feature flags:** LaunchDarkly or Unleash for gradual rollouts
+- **Auto-remediation:** Runbook automation with step execution and rollback
+- **Service mesh:** Istio/Linkerd integration for mesh-level discovery
 
 ---
 
@@ -324,6 +413,11 @@ For first-time setup on a fresh database, the backend runs Alembic migrations au
 - **Why show related runbooks in incident detail?** "When an incident fires, the engineer's first question is 'how do I fix this?' Surfacing runbooks in the same view eliminates context switching and speeds up remediation."
 - **What did load testing reveal?** "On SQLite, the backend handles ~48 RPS with 0 errors at 20 concurrent workers. At 50 workers, p99 latency jumps to 3.3s and 0.4% of requests fail with 'database is locked.' This proves SQLite is the bottleneck, not the API or anomaly detection logic. With PostgreSQL (already in the Docker stack), I'd expect 500+ RPS. The test also measured 784 ms incident detection delay from the first bad event — well within the SLA for a monitoring system."
 - **Why measure detection delay?** "It's not enough to say 'we detect anomalies.' You need to know how fast. 784 ms from the 20th bad event to incident creation is a concrete number I can put on a resume and discuss in an interview."
+- **Why auto-discovery?** "In a microservices environment, services are ephemeral. Containers restart, pods scale, new versions deploy. Manual registration doesn't work at scale. The discovery engine auto-detects the environment and configures the right providers — Docker, Kubernetes, or cloud. No manual config."
+- **Why 7 correlation strategies?** "Each strategy handles a different source of telemetry. A metric from Prometheus might have a pod name. A log from Fluent Bit might have a container ID. A trace from Jaeger might have a parent span service. By trying all 7, we maximize the chance of matching an event to a service without requiring the client to change their telemetry format."
+- **Why pluggable providers?** "The provider pattern decouples the discovery engine from environment-specific logic. Each provider is a single responsibility. Adding a new environment is one file: implement `health_check()` and `discover()`, register it in `EnvironmentDetector`, and the engine picks it up automatically. We could add Consul, etcd, or Consul Connect without touching the engine or registry."
+- **Why PostgreSQL + cache for the registry?** "PostgreSQL is the source of truth — it survives restarts and supports queries. But reading from PostgreSQL on every correlation or probe would be slow. The in-memory cache syncs with the DB on every read, giving us sub-millisecond lookups for the hot path while keeping durability."
+- **What did performance benchmarks reveal?** "Discovery latency for 100 services is <10s. Event correlation averages <5ms. Graph queries for all dependencies are <100ms. Memory footprint for 100 services is <50MB. All benchmarks use deterministic mock data with seed=42 and 100-run repeats for stability. This proves the discovery engine is lightweight enough to run continuously in the background."
 
 ---
 

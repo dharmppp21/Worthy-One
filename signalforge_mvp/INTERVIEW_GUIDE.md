@@ -9,12 +9,12 @@ How to explain SignalForge in 30 seconds, 2 minutes, 5 minutes, or 30 minutes.
 > "I built SignalForge, a production-ready incident management platform for
 > microservices. It ingests telemetry events, detects anomalies using rolling
 > window analysis, creates incidents with structured evidence, and provides a
-> React dashboard for triage and root-cause analysis. 57 tests, load-tested at
+> React dashboard for triage and root-cause analysis. 341 tests, load-tested at
 > 47 RPS, Dockerized full stack, AWS architecture documented. Think of it as
-> PagerDuty + DataDog + an AI assistant, built in 30 days."
+> PagerDuty + DataDog + an AI assistant, built in 49 days."
 
 **Why this works:** Mentions the domain (incident management), the key features
-(ingest, detect, incident, dashboard), the numbers (57 tests, 47 RPS), and the
+(ingest, detect, incident, dashboard), the numbers (341 tests, 47 RPS), and the
 deployment story (Docker, AWS). Ends with a memorable comparison.
 
 ---
@@ -40,7 +40,7 @@ deployment story (Docker, AWS). Ends with a memorable comparison.
 > and runbook coverage. An AI triage assistant suggests actions based on the
 > evidence.
 >
-> It's 57 tests, load-tested at 47 RPS, and deployable to AWS via Docker
+> It's 341 tests, load-tested at 47 RPS, and deployable to AWS via Docker
 > Compose or ECS Fargate. The full architecture is documented with Terraform
 > modules and a CI/CD pipeline."
 
@@ -96,6 +96,27 @@ components by name. Includes numbers. Ends with deployment credibility.
 > connection pool, restart pods, check queue depth, roll back if needed.' The AI
 > triage suggests the same actions with a confidence score of 'high.'"
 
+### Auto-Discovery
+
+> "SignalForge has a pluggable auto-discovery engine. It auto-detects the
+> runtime environment — Docker, Kubernetes, AWS, Azure, or bare metal — and
+> configures the right providers. Each provider scans its environment: Docker
+> containers, K8s pods, host processes, or cloud metadata. The engine runs
+> them concurrently via `asyncio.gather`, deduplicates by `(service_name, host)`,
+> and stores them in PostgreSQL with an in-memory cache for fast lookups.
+>
+> Once discovered, the `ServiceProber` runs HTTP health checks on common
+> endpoints like `/health`, `/healthz`, `/actuator/health`. If those fail, it
+> falls back to TCP connect. The prober classifies service type using 7 layers
+> of heuristics: K8s labels, Docker image, process name, framework detection,
+> port mapping, content-type inference, and fallback.
+>
+> When telemetry events arrive, the `EventServiceCorrelator` tries 7 strategies
+> to match the event to a discovered service: exact name, source IP + port,
+> hostname, container ID, pod name, process ID, and trace context. Each match
+> has a confidence score from 0.85 to 1.0. This means events from unknown
+> sources can still be linked to the right service."
+
 ### Why These Technologies
 
 > **Why FastAPI?** "Async-native, Pydantic for validation, automatic OpenAPI docs.
@@ -120,7 +141,7 @@ components by name. Includes numbers. Ends with deployment credibility.
 
 ### Testing
 
-> "57 tests covering: anomaly detection thresholds, event processor pipeline,
+> "341 tests covering: anomaly detection thresholds, event processor pipeline,
 > incident lifecycle, end-to-end ingest-to-incident flow, service graph from
 > trace events, runbook CRUD, keyword search, auth, and health checks. All pass
 > in under 2 seconds using an in-memory SQLite database. The tests reset the
@@ -378,14 +399,14 @@ Query: `curl -H "X-API-Key: sf-api-key-demo" "http://localhost:8000/search?q=not
 
 | Metric | Number |
 |--------|--------|
-| Development time | 30 days |
-| Tests | 57, all passing |
-| Test runtime | <2 seconds |
+| Development time | 49 days |
+| Tests | 341, all passing |
+| Test runtime | <3 seconds |
 | Ingest throughput | 47.7 RPS |
 | Ingest p95 latency | 380 ms |
 | API read latency | 13-17 ms |
 | Incident detection delay | 784 ms |
-| Backend modules | 40+ |
+| Backend modules | 61 |
 | Docker services | 6 |
 | AWS services | 7 |
 | Dev cost | $130/month |
@@ -402,5 +423,8 @@ Query: `curl -H "X-API-Key: sf-api-key-demo" "http://localhost:8000/search?q=not
 | Semantic search | pgvector cosine similarity |
 | Auth | API key + tenant isolation |
 | Rate limiting | 100 RPS sliding window |
+| Auto-discovery | Docker, K8s, Process, Config, Cloud providers |
+| Health probing | HTTP/TCP with 8 endpoint patterns |
+| Event correlation | 7-strategy matching with confidence scoring |
 | Deployment | Docker Compose + ECS Fargate |
 

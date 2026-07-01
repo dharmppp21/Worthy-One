@@ -63,6 +63,8 @@ local development and gives us a single entry point."
 - **Environment**: `ENVIRONMENT=production`, `LOG_LEVEL=INFO`
 - **Secrets**: Database password, API keys in AWS Secrets Manager, referenced via
   `secrets` in task definition (not env vars)
+- **Discovery**: `SIGNALFORGE_DISCOVERY_ENABLED=true`,
+  `SIGNALFORGE_DISCOVERY_PROVIDERS=cloud,config` (Docker/Process disabled in Fargate)
 
 **Why ECS Fargate?** "It's serverless containers — no EC2 to manage. Fargate
 handles the infrastructure, patching, and scaling. For a Python backend with
@@ -72,6 +74,14 @@ stateless request handling, it's the right balance of control and simplicity."
 consumers doesn't fit Lambda's execution model well. Lambda has a 15-minute
 max duration and no native WebSocket persistence. ECS Fargate is the right
 call for a long-running service with background workers."
+
+**ECS Service Discovery:** In production, the backend uses the `cloud` discovery
+provider to read ECS task metadata and AWS Cloud Map service registries. The
+`SIGNALFORGE_DISCOVERY_PROVIDERS=cloud,config` environment variable disables
+Docker and process discovery (security risk in Fargate) and enables cloud-native
+service discovery. The ECS task metadata v4 endpoint (`169.254.170.2`) provides
+task family, IP address, and container image information without requiring the
+Docker socket.
 
 ### 3. Database — RDS PostgreSQL (Multi-AZ)
 
@@ -269,7 +279,13 @@ understand IaC, drift detection, and reproducible environments."
 "EKS is Kubernetes — powerful but complex. For a Python backend with 3-20
 tasks, Fargate is simpler: no control plane, no node management, no kubectl.
 The trade-off is less flexibility (no DaemonSets, limited sidecar patterns).
-If we needed complex service mesh or custom networking, EKS would be the next step."
+If we needed complex service mesh or custom networking, EKS would be the next step.
+
+> **EKS Discovery:** If using EKS, the `kubernetes` discovery provider scans pods
+> and services in the cluster. The Helm chart includes RBAC (ClusterRole or Role)
+> for the service account. The `cloud` provider also runs to enrich discovered
+> services with AWS metadata (instance tags, region, account ID). This dual
+> provider approach gives both K8s-native and cloud-native context."
 
 ### How do you handle zero-downtime deployments?
 "ECS rolling updates: the service starts new tasks with the new image, waits
@@ -285,8 +301,9 @@ CPU. 2. Scale RDS: move from db.t3.medium to db.r6g.xlarge, enable read replicas
 for query-heavy endpoints. 3. Scale Redis: ElastiCache cluster mode adds shards.
 4. Scale Kafka: MSK Serverless auto-scales partitions. 5. Add caching: CloudFront
 for static assets, API response caching for `/incidents` and `/graph`. 6. Database
-connection pooling: RDS Proxy handles 1000+ connections. Each step is independent —
-we can scale components as needed."
+connection pooling: RDS Proxy handles 1000+ connections. 7. Scale discovery: use
+AWS Cloud Map for cross-service discovery instead of per-task scanning. Each step
+is independent — we can scale components as needed."
 
 ### How do you handle secrets in a 12-factor app?
 "The 12-factor app says config in env vars. But AWS best practice is: use Secrets
