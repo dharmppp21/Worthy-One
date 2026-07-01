@@ -261,6 +261,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 # --workers 4: Uses 4 processes for handling concurrent requests
 ```
 
+> **Note:** If you see `Local embedding model init failed: No module named 'sentence_transformers'`, this is **harmless** — the app gracefully falls back to keyword search. To use the local embedding model, install it: `pip install sentence-transformers`.
+
 ### 4.4 Check API Documentation (Auto-Generated)
 
 ```bash

@@ -6,13 +6,14 @@ router transparently falls back to the existing keyword search.
 """
 
 import hashlib
-import warnings
+import logging
 from typing import Any
 
 from app.config import config
 
-EMBEDDING_DIM = 1536
+logger = logging.getLogger(__name__)
 
+EMBEDDING_DIM = 1536
 
 class EmbeddingService:
     """Generate text embeddings with graceful fallback."""
@@ -33,7 +34,7 @@ class EmbeddingService:
                 self._mode = "openai"
                 return
             except Exception as exc:
-                warnings.warn(f"OpenAI embedding init failed: {exc}", stacklevel=2)
+                logger.info("OpenAI embedding init failed: %s", exc)
 
         # Try local sentence-transformers
         try:
@@ -42,7 +43,7 @@ class EmbeddingService:
             self._mode = "local"
             return
         except Exception as exc:
-            warnings.warn(f"Local embedding model init failed: {exc}", stacklevel=2)
+            logger.info("Local embedding model init failed: %s", exc)
 
         # No embedding service available
         self._mode = None
