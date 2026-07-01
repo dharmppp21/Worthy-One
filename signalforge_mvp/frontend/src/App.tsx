@@ -903,6 +903,8 @@ function Dashboard() {
             />
           )}
         </div>
+      )}
+
       {/* Topology Tab */}
       {activeTab === "topology" && (
         <ServiceTopologyMap
