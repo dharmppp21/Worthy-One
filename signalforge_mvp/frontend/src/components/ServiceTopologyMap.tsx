@@ -192,7 +192,7 @@ export default function ServiceTopologyMap({
 
   const onConnect = useCallback((params: Connection) => setEdges((eds) => addEdge(params, eds)), [setEdges]);
 
-  const onNodeClick = useCallback(
+  const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
       const svc = enrichedServices.find((s) => s.service_id === node.id);
       if (svc) onNodeClick(svc);
@@ -325,7 +325,7 @@ export default function ServiceTopologyMap({
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
-          onNodeClick={onNodeClick}
+          onNodeClick={handleNodeClick}
           nodeTypes={nodeTypes}
           fitView
           attributionPosition="bottom-left"
