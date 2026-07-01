@@ -3,6 +3,7 @@
 Detects the runtime environment (Docker, Kubernetes, AWS, Azure, GCP, VM)
 and configures the appropriate discovery providers.
 """
+
 from __future__ import annotations
 
 import logging
@@ -40,6 +41,7 @@ class EnvironmentDetector:
         if platform.system() == "Windows":
             try:
                 import psutil
+
                 for proc in psutil.process_iter(attrs=["name"]):
                     name = (proc.info.get("name") or "").lower()
                     if "docker" in name or "dockerd" in name:
@@ -158,7 +160,10 @@ class AutoConfigurator:
     """Reads environment variables and configures the DiscoveryEngine."""
 
     def __init__(self) -> None:
-        self.enabled = os.environ.get("SIGNALFORGE_DISCOVERY_ENABLED", "true").lower() == "true"
+        """Initialize the auto-configurator from environment variables."""
+        self.enabled = (
+            os.environ.get("SIGNALFORGE_DISCOVERY_ENABLED", "true").lower() == "true"
+        )
         self.interval = int(os.environ.get("SIGNALFORGE_DISCOVERY_INTERVAL", "30"))
         self.overrides = os.environ.get("SIGNALFORGE_DISCOVERY_PROVIDERS", "")
         self.k8s_namespace = os.environ.get("SIGNALFORGE_K8S_NAMESPACE")

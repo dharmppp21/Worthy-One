@@ -5,6 +5,7 @@ Provides HTTP and TCP health probes, protocol detection, and service
 type classification based on response analysis and known port/image/process
 heuristics.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -101,6 +102,7 @@ class ServiceProber:
         registry: ServiceRegistry,
         publisher: Optional[Any] = None,
     ) -> None:
+        """Initialize the health probe runner."""
         self._registry = registry
         self._publisher = publisher
         self._http_client = httpx.AsyncClient(
@@ -396,9 +398,7 @@ class ServiceProber:
         for task, result in zip(tasks, results):
             service = task_to_service[task]
             if isinstance(result, Exception):
-                logger.error(
-                    "Probe failed for %s: %s", service.service_name, result
-                )
+                logger.error("Probe failed for %s: %s", service.service_name, result)
                 result = HealthProbeResult(
                     service_id=service.service_id,
                     status=ProbeStatus.unknown,
@@ -416,9 +416,7 @@ class ServiceProber:
 
             # Persist updated health status
             try:
-                self._registry.update_health_status(
-                    service.service_id, new_status
-                )
+                self._registry.update_health_status(service.service_id, new_status)
                 self._registry.update_heartbeat(service.service_id)
             except ValueError:
                 pass
@@ -451,9 +449,7 @@ class ServiceProber:
             return
 
         self._stop_event = asyncio.Event()
-        self._background_task = asyncio.create_task(
-            self._probe_loop(interval_seconds)
-        )
+        self._background_task = asyncio.create_task(self._probe_loop(interval_seconds))
         logger.info("Background probing started (interval=%ds).", interval_seconds)
 
     def stop_background_probing(self) -> None:
@@ -496,7 +492,6 @@ class ServiceProber:
 # ------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------
-
 
 
 def _extract_ports(endpoints: List[str]) -> List[int]:

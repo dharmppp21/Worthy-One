@@ -1,7 +1,7 @@
 """Distributed tracing analyzer for inferring service dependencies from trace data."""
+
 from __future__ import annotations
 
-import json
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -57,7 +57,9 @@ class TraceAnalyzer(BaseDependencyAnalyzer):
         self._lookback_hours = lookback_hours
         self._limit = limit
 
-    async def analyze(self, raw_traces: Optional[List[Dict[str, Any]]] = None) -> List[ServiceDependency]:
+    async def analyze(
+        self, raw_traces: Optional[List[Dict[str, Any]]] = None
+    ) -> List[ServiceDependency]:
         """Analyze trace data and return inferred service dependencies.
 
         Args:
@@ -102,7 +104,9 @@ class TraceAnalyzer(BaseDependencyAnalyzer):
                     continue
 
                 parent_span = span_map[parent_id]
-                parent_service = _normalize_service_name(self._get_service_name(parent_span))
+                parent_service = _normalize_service_name(
+                    self._get_service_name(parent_span)
+                )
                 child_service = _normalize_service_name(self._get_service_name(span))
 
                 if not parent_service or not child_service:
@@ -137,7 +141,9 @@ class TraceAnalyzer(BaseDependencyAnalyzer):
             parent_svc = self._find_service_by_name(parent_service)
             child_svc = self._find_service_by_name(child_service)
 
-            parent_id = parent_svc.service_id if parent_svc else f"trace-{parent_service}"
+            parent_id = (
+                parent_svc.service_id if parent_svc else f"trace-{parent_service}"
+            )
             child_id = child_svc.service_id if child_svc else f"trace-{child_service}"
 
             count = metrics["count"]
@@ -197,7 +203,10 @@ class TraceAnalyzer(BaseDependencyAnalyzer):
         refs = span.get("references", [])
         if refs and isinstance(refs, list):
             for ref in refs:
-                if ref.get("refType") == "CHILD_OF" or ref.get("ref_type") == "child_of":
+                if (
+                    ref.get("refType") == "CHILD_OF"
+                    or ref.get("ref_type") == "child_of"
+                ):
                     return ref.get("spanID") or ref.get("span_id")
         # Zipkin uses parentId directly
         return span.get("parentId") or span.get("parent_id")

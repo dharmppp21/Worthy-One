@@ -1,10 +1,11 @@
 """Dependency registry: persists service dependencies to PostgreSQL and caches them."""
+
 from __future__ import annotations
 
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -54,6 +55,7 @@ class DependencyRegistry:
         """Convert an ORM instance to a Pydantic model."""
 
         def _ensure_utc(dt: datetime) -> datetime:
+            """Ensure a datetime is timezone-aware UTC."""
             if dt.tzinfo is None:
                 return dt.replace(tzinfo=timezone.utc)
             return dt
@@ -93,10 +95,14 @@ class DependencyRegistry:
             True if the dependency was newly created, False if it was updated.
         """
         key = f"{dep.source_service_id}::{dep.target_service_id}"
-        existing = self._db.query(ServiceDependencyDB).filter_by(
-            source_service_id=dep.source_service_id,
-            target_service_id=dep.target_service_id,
-        ).first()
+        existing = (
+            self._db.query(ServiceDependencyDB)
+            .filter_by(
+                source_service_id=dep.source_service_id,
+                target_service_id=dep.target_service_id,
+            )
+            .first()
+        )
 
         is_new = False
         now = datetime.now(timezone.utc)
@@ -126,7 +132,10 @@ class DependencyRegistry:
 
         self._cache[key] = self._to_model(
             self._db.query(ServiceDependencyDB)
-            .filter_by(source_service_id=dep.source_service_id, target_service_id=dep.target_service_id)
+            .filter_by(
+                source_service_id=dep.source_service_id,
+                target_service_id=dep.target_service_id,
+            )
             .first()
         )
         return is_new
@@ -156,7 +165,9 @@ class DependencyRegistry:
         """Return all stored dependencies."""
         return self.get_dependencies()
 
-    def get_dependency_graph(self, services: List[DiscoveredService]) -> DependencyGraph:
+    def get_dependency_graph(
+        self, services: List[DiscoveredService]
+    ) -> DependencyGraph:
         """Build a DependencyGraph from all dependencies and the given service nodes."""
         edges = self.get_all_dependencies()
         return DependencyGraph(nodes=services, edges=edges)

@@ -1,4 +1,5 @@
 """Process-based service discovery provider using psutil."""
+
 from __future__ import annotations
 
 import logging
@@ -17,34 +18,80 @@ except ImportError:  # pragma: no cover
 logger = logging.getLogger(__name__)
 
 # System processes to skip
-_SYSTEM_BLOCKLIST = frozenset({
-    "system", "kernel", "svchost", "services", "wininit", "winlogon",
-    "csrss", "lsass", "smss", "crss", "registry", "fontdrvhost",
-    "idle", "system idle process", "conhost", "dwm", "explorer",
-    "taskhost", "runtimebroker", "searchindexer", "spoolsv",
-    "wlanext", "audiodg", "mpnotify", "mscorsvw", "ngen",
-    "sihost", "shell experiences host", "backgroundtaskhost",
-    "securityhealthservice", "wudfhost", "psvc", "mpuxsrv",
-})
+_SYSTEM_BLOCKLIST = frozenset(
+    {
+        "system",
+        "kernel",
+        "svchost",
+        "services",
+        "wininit",
+        "winlogon",
+        "csrss",
+        "lsass",
+        "smss",
+        "crss",
+        "registry",
+        "fontdrvhost",
+        "idle",
+        "system idle process",
+        "conhost",
+        "dwm",
+        "explorer",
+        "taskhost",
+        "runtimebroker",
+        "searchindexer",
+        "spoolsv",
+        "wlanext",
+        "audiodg",
+        "mpnotify",
+        "mscorsvw",
+        "ngen",
+        "sihost",
+        "shell experiences host",
+        "backgroundtaskhost",
+        "securityhealthservice",
+        "wudfhost",
+        "psvc",
+        "mpuxsrv",
+    }
+)
 
 # Known port -> service_type mapping
 _PORT_TYPE_MAP = {
-    80: "web", 443: "web",
-    5432: "database", 3306: "database", 27017: "database",
-    6379: "cache", 11211: "cache",
+    80: "web",
+    443: "web",
+    5432: "database",
+    3306: "database",
+    27017: "database",
+    6379: "cache",
+    11211: "cache",
     9092: "message_queue",
-    8080: "api", 3000: "api", 5000: "api", 8000: "api",
-    9200: "search", 5601: "dashboard",
+    8080: "api",
+    3000: "api",
+    5000: "api",
+    8000: "api",
+    9200: "search",
+    5601: "dashboard",
 }
 
 # Executable name keywords -> service_name hint
 _EXE_NAME_HINTS = {
-    "nginx": "nginx", "postgres": "postgres", "python": "python-app",
-    "node": "node-app", "java": "java-app", "redis-server": "redis",
-    "redis": "redis", "mongod": "mongodb", "mysql": "mysql",
-    "mariadb": "mariadb", "kafka": "kafka", "zookeeper": "zookeeper",
-    "elasticsearch": "elasticsearch", "kibana": "kibana",
-    "go": "go-app", "dotnet": "dotnet-app",
+    "nginx": "nginx",
+    "postgres": "postgres",
+    "python": "python-app",
+    "node": "node-app",
+    "java": "java-app",
+    "redis-server": "redis",
+    "redis": "redis",
+    "mongod": "mongodb",
+    "mysql": "mysql",
+    "mariadb": "mariadb",
+    "kafka": "kafka",
+    "zookeeper": "zookeeper",
+    "elasticsearch": "elasticsearch",
+    "kibana": "kibana",
+    "go": "go-app",
+    "dotnet": "dotnet-app",
 }
 
 
@@ -100,7 +147,18 @@ class ProcessDiscoveryProvider(ServiceDiscoveryProvider):
         discovered: List[DiscoveredService] = []
         seen_keys: set = set()
 
-        for proc in psutil.process_iter(attrs=["pid", "name", "exe", "cmdline", "username", "create_time", "cpu_percent", "memory_percent"]):
+        for proc in psutil.process_iter(
+            attrs=[
+                "pid",
+                "name",
+                "exe",
+                "cmdline",
+                "username",
+                "create_time",
+                "cpu_percent",
+                "memory_percent",
+            ]
+        ):
             try:
                 info = proc.info
                 proc_name = (info.get("name") or "").lower()
@@ -143,8 +201,11 @@ class ProcessDiscoveryProvider(ServiceDiscoveryProvider):
                     "cmdline": info.get("cmdline") or [],
                     "username": info.get("username"),
                     "create_time": (
-                        datetime.fromtimestamp(info["create_time"], tz=timezone.utc).isoformat()
-                        if info.get("create_time") else None
+                        datetime.fromtimestamp(
+                            info["create_time"], tz=timezone.utc
+                        ).isoformat()
+                        if info.get("create_time")
+                        else None
                     ),
                     "cpu_percent": info.get("cpu_percent"),
                     "memory_percent": info.get("memory_percent"),
@@ -171,7 +232,11 @@ class ProcessDiscoveryProvider(ServiceDiscoveryProvider):
             except (psutil.NoSuchProcess, psutil.AccessDenied, PermissionError):
                 continue
             except Exception as exc:  # pragma: no cover
-                logger.debug("Unexpected error scanning process %s: %s", proc.info.get("pid", "?"), exc)
+                logger.debug(
+                    "Unexpected error scanning process %s: %s",
+                    proc.info.get("pid", "?"),
+                    exc,
+                )
                 continue
 
         return discovered

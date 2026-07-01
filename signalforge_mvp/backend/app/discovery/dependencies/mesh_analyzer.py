@@ -1,4 +1,5 @@
 """Service mesh analyzer for inferring dependencies from Istio/Envoy metrics."""
+
 from __future__ import annotations
 
 import asyncio
@@ -72,7 +73,9 @@ class ServiceMeshAnalyzer(BaseDependencyAnalyzer):
     async def analyze(self) -> List[ServiceDependency]:
         """Query mesh metrics and return inferred dependencies."""
         if self._disabled:
-            logger.info("ServiceMeshAnalyzer is disabled (no Prometheus URL configured).")
+            logger.info(
+                "ServiceMeshAnalyzer is disabled (no Prometheus URL configured)."
+            )
             return []
 
         if httpx is None:
@@ -142,7 +145,10 @@ class ServiceMeshAnalyzer(BaseDependencyAnalyzer):
             if ts is not None:
                 try:
                     dt = datetime.fromtimestamp(float(ts), tz=timezone.utc)
-                    if grouped[key]["last_seen"] is None or dt > grouped[key]["last_seen"]:
+                    if (
+                        grouped[key]["last_seen"] is None
+                        or dt > grouped[key]["last_seen"]
+                    ):
                         grouped[key]["last_seen"] = dt
                 except (ValueError, TypeError):
                     pass
@@ -197,7 +203,7 @@ class ServiceMeshAnalyzer(BaseDependencyAnalyzer):
         sum_samples = await self._prometheus_query_with_retry(
             _ISTIO_REQUEST_DURATION_SUM,
         )
-        for sample in (sum_samples or []):
+        for sample in sum_samples or []:
             metric = sample.get("metric", {})
             source = metric.get("source_app", "")
             dest = metric.get("destination_app", "")
@@ -213,7 +219,7 @@ class ServiceMeshAnalyzer(BaseDependencyAnalyzer):
         count_samples = await self._prometheus_query_with_retry(
             _ISTIO_REQUEST_DURATION_COUNT,
         )
-        for sample in (count_samples or []):
+        for sample in count_samples or []:
             metric = sample.get("metric", {})
             source = metric.get("source_app", "")
             dest = metric.get("destination_app", "")
@@ -260,7 +266,9 @@ class ServiceMeshAnalyzer(BaseDependencyAnalyzer):
                 if cluster_name:
                     clusters[cluster_name]["total_count"] += count
             elif _ENVOY_RQ_TIME_SUM in line:
-                cluster_name, sum_time = self._parse_envoy_line(line, _ENVOY_RQ_TIME_SUM)
+                cluster_name, sum_time = self._parse_envoy_line(
+                    line, _ENVOY_RQ_TIME_SUM
+                )
                 if cluster_name:
                     clusters[cluster_name]["sum_time"] += sum_time
 
@@ -349,13 +357,18 @@ class ServiceMeshAnalyzer(BaseDependencyAnalyzer):
                 return await self._prometheus_query(query)
             except Exception as exc:
                 logger.warning(
-                    "Prometheus query failed (attempt %d/%d): %s", attempt, _MAX_RETRIES, exc
+                    "Prometheus query failed (attempt %d/%d): %s",
+                    attempt,
+                    _MAX_RETRIES,
+                    exc,
                 )
                 if attempt < _MAX_RETRIES:
                     wait = _BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
                     await asyncio.sleep(wait)
 
-        logger.error("Prometheus query failed after %d retries: %s", _MAX_RETRIES, query)
+        logger.error(
+            "Prometheus query failed after %d retries: %s", _MAX_RETRIES, query
+        )
         return None
 
     async def _prometheus_query(
@@ -370,7 +383,9 @@ class ServiceMeshAnalyzer(BaseDependencyAnalyzer):
             data = resp.json()
 
         if data.get("status") != "success":
-            raise RuntimeError(f"Prometheus query failed: {data.get('error', 'unknown')}")
+            raise RuntimeError(
+                f"Prometheus query failed: {data.get('error', 'unknown')}"
+            )
 
         result_data = data.get("data", {})
         result_type = result_data.get("resultType", "")

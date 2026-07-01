@@ -1,4 +1,5 @@
 """Network-based dependency detection scanner using psutil."""
+
 from __future__ import annotations
 
 import logging
@@ -19,10 +20,16 @@ logger = logging.getLogger(__name__)
 
 # Port -> dependency_type inference
 _PORT_TYPE_MAP = {
-    5432: "database", 3306: "database", 27017: "database",
-    6379: "cache", 11211: "cache",
+    5432: "database",
+    3306: "database",
+    27017: "database",
+    6379: "cache",
+    11211: "cache",
     9092: "message_queue",
-    80: "http", 443: "http", 8080: "http", 3000: "http",
+    80: "http",
+    443: "http",
+    8080: "http",
+    3000: "http",
     50051: "grpc",
 }
 
@@ -97,7 +104,11 @@ class NetworkConnectionScanner(BaseDependencyAnalyzer):
 
             # Try to find the actual target service_id for known services
             target_service = self._find_service_by_endpoint(remote_ip, remote_port)
-            target_id = target_service.service_id if target_service else self._inferred_service_id(remote_ip, remote_port)
+            target_id = (
+                target_service.service_id
+                if target_service
+                else self._inferred_service_id(remote_ip, remote_port)
+            )
 
             confidence = 0.8 if target_service else 0.3
 

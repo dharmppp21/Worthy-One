@@ -1,6 +1,7 @@
 """
 Pydantic models for service discovery.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -18,6 +19,7 @@ def _utc_now() -> datetime:
 
 class ProbeStatus(str, Enum):
     """Health probe status enum."""
+
     up = "up"
     down = "down"
     unknown = "unknown"
@@ -25,6 +27,7 @@ class ProbeStatus(str, Enum):
 
 class ProbeType(str, Enum):
     """Health probe type enum."""
+
     http = "http"
     tcp = "tcp"
 

@@ -1,4 +1,5 @@
 """Traffic log analyzer for inferring service dependencies from HTTP logs."""
+
 from __future__ import annotations
 
 import json
@@ -17,17 +18,17 @@ logger = logging.getLogger(__name__)
 # Common log format patterns
 _LOG_PATTERNS = {
     "nginx_combined": re.compile(
-        r'^(?P<remote_addr>\S+)\s+\S+\s+\S+\s+\[(?P<time>[^\]]+)\]\s+'
+        r"^(?P<remote_addr>\S+)\s+\S+\s+\S+\s+\[(?P<time>[^\]]+)\]\s+"
         r'"(?P<method>\S+)\s+(?P<path>\S+)\s+\S+"\s+'
-        r'(?P<status>\d{3})\s+(?P<bytes>\d+|-)\s+'
+        r"(?P<status>\d{3})\s+(?P<bytes>\d+|-)\s+"
         r'"(?P<referer>[^"]*)"\s+"(?P<user_agent>[^"]*)"\s+'
         r'"(?P<host>[^"]*)"(?:\s+(?P<req_time>\S+))?'
     ),
     "envoy": re.compile(
-        r'^(?P<remote_addr>\S+)\s+\S+\s+\S+\s+\[(?P<time>[^\]]+)\]\s+'
+        r"^(?P<remote_addr>\S+)\s+\S+\s+\S+\s+\[(?P<time>[^\]]+)\]\s+"
         r'"(?P<method>\S+)\s+(?P<path>\S+)\s+\S+"\s+'
-        r'(?P<status>\d{3})\s+(?P<bytes>\d+|-)\s+'
-        r'(?P<resp_flags>\S+)\s+(?P<resp_time>\S+)\s+'
+        r"(?P<status>\d{3})\s+(?P<bytes>\d+|-)\s+"
+        r"(?P<resp_flags>\S+)\s+(?P<resp_time>\S+)\s+"
         r'"(?P<referer>[^"]*)"\s+"(?P<user_agent>[^"]*)"\s+'
         r'"(?P<host>[^"]*)"\s+"(?P<upstream>[^"]*)"'
     ),
@@ -35,9 +36,9 @@ _LOG_PATTERNS = {
 
 # Service name extraction patterns from URL paths
 _SERVICE_PATH_PATTERNS = [
-    re.compile(r'^/api/v\d+/(?P<service>[^/]+)'),
-    re.compile(r'^/services/(?P<service>[^/]+)'),
-    re.compile(r'^/(?P<service>[^/]+)/api'),
+    re.compile(r"^/api/v\d+/(?P<service>[^/]+)"),
+    re.compile(r"^/services/(?P<service>[^/]+)"),
+    re.compile(r"^/(?P<service>[^/]+)/api"),
 ]
 
 
@@ -61,7 +62,7 @@ def _extract_service_from_host(host: str) -> Optional[str]:
     if not host:
         return None
     # Kubernetes-style service naming
-    parts = host.split('.')
+    parts = host.split(".")
     if parts:
         return parts[0]
     return None
@@ -100,7 +101,9 @@ class TrafficAnalyzer(BaseDependencyAnalyzer):
         self._log_source = log_source
         self._log_format = log_format
 
-    async def analyze(self, log_lines: Optional[List[str]] = None) -> List[ServiceDependency]:
+    async def analyze(
+        self, log_lines: Optional[List[str]] = None
+    ) -> List[ServiceDependency]:
         """Analyze traffic logs and return inferred service dependencies.
 
         Args:
@@ -174,8 +177,12 @@ class TrafficAnalyzer(BaseDependencyAnalyzer):
             source_svc = self._find_service_by_name(source_name)
             target_svc = self._find_service_by_name(target_name)
 
-            source_id = source_svc.service_id if source_svc else f"traffic-{source_name}"
-            target_id = target_svc.service_id if target_svc else f"traffic-{target_name}"
+            source_id = (
+                source_svc.service_id if source_svc else f"traffic-{source_name}"
+            )
+            target_id = (
+                target_svc.service_id if target_svc else f"traffic-{target_name}"
+            )
 
             count = metrics["count"]
             latencies = metrics["latencies"]
@@ -229,12 +236,20 @@ class TrafficAnalyzer(BaseDependencyAnalyzer):
         data = json.loads(line)
         # Normalize common field names
         entry: Dict[str, Any] = {}
-        entry["remote_addr"] = data.get("remote_addr") or data.get("client_ip") or data.get("ip")
+        entry["remote_addr"] = (
+            data.get("remote_addr") or data.get("client_ip") or data.get("ip")
+        )
         entry["method"] = data.get("method") or data.get("request_method")
         entry["path"] = data.get("path") or data.get("request_path") or data.get("uri")
-        entry["status"] = data.get("status") or data.get("response_code") or data.get("status_code")
-        entry["host"] = data.get("host") or data.get("authority") or data.get("server_name")
-        entry["req_time"] = data.get("request_time") or data.get("duration") or data.get("latency_ms")
+        entry["status"] = (
+            data.get("status") or data.get("response_code") or data.get("status_code")
+        )
+        entry["host"] = (
+            data.get("host") or data.get("authority") or data.get("server_name")
+        )
+        entry["req_time"] = (
+            data.get("request_time") or data.get("duration") or data.get("latency_ms")
+        )
         entry["upstream"] = data.get("upstream") or data.get("upstream_service")
 
         ts = data.get("time") or data.get("timestamp") or data.get("time_local")
@@ -251,10 +266,14 @@ class TrafficAnalyzer(BaseDependencyAnalyzer):
         entry["path"] = match.group("path")
         entry["status"] = match.group("status")
         entry["host"] = match.group("host") if "host" in match.groupdict() else None
-        entry["req_time"] = match.group("req_time") if "req_time" in match.groupdict() else None
+        entry["req_time"] = (
+            match.group("req_time") if "req_time" in match.groupdict() else None
+        )
         if entry["req_time"] is None and "resp_time" in match.groupdict():
             entry["req_time"] = match.group("resp_time")
-        entry["upstream"] = match.group("upstream") if "upstream" in match.groupdict() else None
+        entry["upstream"] = (
+            match.group("upstream") if "upstream" in match.groupdict() else None
+        )
 
         ts = match.group("time")
         if ts:
@@ -312,6 +331,7 @@ class TrafficAnalyzer(BaseDependencyAnalyzer):
         if self._log_source.startswith(("http://", "https://")):
             try:
                 import httpx
+
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     resp = await client.get(self._log_source)
                     resp.raise_for_status()

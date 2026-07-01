@@ -1,11 +1,12 @@
 """
 Service registry: persists discovered services to PostgreSQL and caches them in memory.
 """
+
 from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -58,6 +59,7 @@ class ServiceRegistry:
         """Convert an ORM instance to a Pydantic model."""
 
         def ensure_utc(dt: datetime) -> datetime:
+            """Ensure a datetime is timezone-aware UTC."""
             if dt.tzinfo is None:
                 return dt.replace(tzinfo=timezone.utc)
             return dt
@@ -80,7 +82,9 @@ class ServiceRegistry:
     def _refresh_cache(self) -> None:
         """Load all active services from DB into the cache."""
         self._cache = {}
-        for db_obj in self._db.query(DiscoveredServiceDB).filter_by(is_active=True).all():
+        for db_obj in (
+            self._db.query(DiscoveredServiceDB).filter_by(is_active=True).all()
+        ):
             self._cache[db_obj.service_id] = self._to_model(db_obj)
 
     # ------------------------------------------------------------------
@@ -190,7 +194,9 @@ class ServiceRegistry:
         Raises:
             ValueError: If the service is not found.
         """
-        db_obj = self._db.query(DiscoveredServiceDB).filter_by(service_id=service_id).first()
+        db_obj = (
+            self._db.query(DiscoveredServiceDB).filter_by(service_id=service_id).first()
+        )
         if not db_obj:
             raise ValueError(f"Service with id={service_id} not found")
 
@@ -211,7 +217,9 @@ class ServiceRegistry:
         Raises:
             ValueError: If the service is not found.
         """
-        db_obj = self._db.query(DiscoveredServiceDB).filter_by(service_id=service_id).first()
+        db_obj = (
+            self._db.query(DiscoveredServiceDB).filter_by(service_id=service_id).first()
+        )
         if not db_obj:
             raise ValueError(f"Service with id={service_id} not found")
 
@@ -224,7 +232,9 @@ class ServiceRegistry:
 
         self._cache[service_id] = self._to_model(db_obj)
 
-    def remove_stale_services(self, timeout_seconds: int = 120) -> list[tuple[str, str]]:
+    def remove_stale_services(
+        self, timeout_seconds: int = 120
+    ) -> list[tuple[str, str]]:
         """
         Remove services whose last heartbeat is older than ``timeout_seconds``.
 

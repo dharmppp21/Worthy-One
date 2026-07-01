@@ -1,6 +1,7 @@
 """
 Abstract base class for service discovery providers.
 """
+
 from abc import ABC, abstractmethod
 from typing import List
 

@@ -1,10 +1,9 @@
 """Kubernetes-based service discovery provider using the Kubernetes client library."""
+
 from __future__ import annotations
 
 import logging
-import os
 import re
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from app.discovery.base import ServiceDiscoveryProvider
@@ -23,21 +22,34 @@ _K8S_SUFFIX_RE = re.compile(r"-[a-z0-9]{8,10}-[a-z0-9]{4,6}$")
 
 # Component label -> service_type
 _K8S_COMPONENT_TYPES = {
-    "database": "database", "db": "database",
-    "cache": "cache", "redis": "cache",
-    "queue": "message_queue", "kafka": "message_queue",
-    "web": "web", "frontend": "web",
-    "api": "api", "backend": "api",
+    "database": "database",
+    "db": "database",
+    "cache": "cache",
+    "redis": "cache",
+    "queue": "message_queue",
+    "kafka": "message_queue",
+    "web": "web",
+    "frontend": "web",
+    "api": "api",
+    "backend": "api",
 }
 
 # Known port -> service_type (fallback)
 _PORT_TYPE_MAP = {
-    80: "web", 443: "web",
-    5432: "database", 3306: "database", 27017: "database",
-    6379: "cache", 11211: "cache",
+    80: "web",
+    443: "web",
+    5432: "database",
+    3306: "database",
+    27017: "database",
+    6379: "cache",
+    11211: "cache",
     9092: "message_queue",
-    8080: "api", 3000: "api", 5000: "api", 8000: "api",
-    9200: "search", 5601: "dashboard",
+    8080: "api",
+    3000: "api",
+    5000: "api",
+    8000: "api",
+    9200: "search",
+    5601: "dashboard",
 }
 
 
@@ -135,8 +147,8 @@ class KubernetesDiscoveryProvider(ServiceDiscoveryProvider):
 
                 # Collect container ports
                 container_ports: List[int] = []
-                for container in (pod.spec.containers or []):
-                    for port in (container.ports or []):
+                for container in pod.spec.containers or []:
+                    for port in container.ports or []:
                         if port.container_port:
                             container_ports.append(port.container_port)
 
@@ -152,7 +164,7 @@ class KubernetesDiscoveryProvider(ServiceDiscoveryProvider):
 
                 # Restart count
                 restart_count = 0
-                for cs in (pod.status.container_statuses or []):
+                for cs in pod.status.container_statuses or []:
                     restart_count += cs.restart_count or 0
 
                 # Start time
@@ -192,7 +204,9 @@ class KubernetesDiscoveryProvider(ServiceDiscoveryProvider):
                     )
                 )
             except Exception as exc:  # pragma: no cover
-                logger.debug("Error scanning pod %s: %s", getattr(pod.metadata, "name", "?"), exc)
+                logger.debug(
+                    "Error scanning pod %s: %s", getattr(pod.metadata, "name", "?"), exc
+                )
                 continue
 
         return discovered

@@ -1,9 +1,10 @@
 """Cloud-based service discovery provider (AWS, Azure, GCP)."""
+
 from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from app.discovery.base import ServiceDiscoveryProvider
 from app.discovery.models import DiscoveredService
@@ -33,12 +34,24 @@ _GCP_METADATA_URL = "http://metadata.google.internal/computeMetadata/v1/instance
 
 # Image name keywords -> service_type
 _IMAGE_TYPE_HINTS = {
-    "postgres": "database", "mysql": "database", "mariadb": "database",
-    "mongo": "database", "mongodb": "database", "redis": "cache",
-    "kafka": "message_queue", "zookeeper": "message_queue",
-    "nginx": "web", "apache": "web", "caddy": "web",
-    "node": "api", "python": "api", "go": "api", "java": "api",
-    "dotnet": "api", "elasticsearch": "search", "kibana": "dashboard",
+    "postgres": "database",
+    "mysql": "database",
+    "mariadb": "database",
+    "mongo": "database",
+    "mongodb": "database",
+    "redis": "cache",
+    "kafka": "message_queue",
+    "zookeeper": "message_queue",
+    "nginx": "web",
+    "apache": "web",
+    "caddy": "web",
+    "node": "api",
+    "python": "api",
+    "go": "api",
+    "java": "api",
+    "dotnet": "api",
+    "elasticsearch": "search",
+    "kibana": "dashboard",
 }
 
 
@@ -78,7 +91,12 @@ def _is_aws_eks() -> bool:
 
 def _is_aws() -> bool:
     """Check if running in any AWS environment."""
-    return _is_aws_ecs() or _is_aws_eks() or os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("AWS_WEB_IDENTITY_TOKEN_FILE")
+    return (
+        _is_aws_ecs()
+        or _is_aws_eks()
+        or os.environ.get("AWS_DEFAULT_REGION")
+        or os.environ.get("AWS_WEB_IDENTITY_TOKEN_FILE")
+    )
 
 
 def _is_azure() -> bool:
@@ -135,13 +153,17 @@ def _discover_aws_ecs() -> List[DiscoveredService]:
 
     for cluster_arn in clusters:
         try:
-            services = ecs.list_services(cluster=cluster_arn, maxResults=10)["serviceArns"]
+            services = ecs.list_services(cluster=cluster_arn, maxResults=10)[
+                "serviceArns"
+            ]
         except Exception:
             continue
 
         for service_arn in services:
             try:
-                task_list = ecs.list_tasks(cluster=cluster_arn, serviceName=service_arn, maxResults=10)["taskArns"]
+                task_list = ecs.list_tasks(
+                    cluster=cluster_arn, serviceName=service_arn, maxResults=10
+                )["taskArns"]
             except Exception:
                 continue
 
@@ -149,13 +171,19 @@ def _discover_aws_ecs() -> List[DiscoveredService]:
                 continue
 
             try:
-                task_desc = ecs.describe_tasks(cluster=cluster_arn, tasks=task_list)["tasks"]
+                task_desc = ecs.describe_tasks(cluster=cluster_arn, tasks=task_list)[
+                    "tasks"
+                ]
             except Exception:
                 continue
 
             for task in task_desc:
                 try:
-                    service_name = service_arn.split("/")[-1] if "/" in service_arn else service_arn
+                    service_name = (
+                        service_arn.split("/")[-1]
+                        if "/" in service_arn
+                        else service_arn
+                    )
                     host = "127.0.0.1"
                     endpoints: List[str] = []
                     image_name = ""

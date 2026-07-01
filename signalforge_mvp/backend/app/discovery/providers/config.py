@@ -1,4 +1,5 @@
 """Config-based service discovery provider (JSON/YAML from env or file)."""
+
 from __future__ import annotations
 
 import json
@@ -25,7 +26,11 @@ def _load_yaml(data: str) -> Any:
 class ConfigDiscoveryProvider(ServiceDiscoveryProvider):
     """Discovers services from a JSON/YAML config source."""
 
-    def __init__(self, env_var: str = "SIGNALFORGE_SERVICES", file_env_var: str = "SIGNALFORGE_SERVICES_CONFIG") -> None:
+    def __init__(
+        self,
+        env_var: str = "SIGNALFORGE_SERVICES",
+        file_env_var: str = "SIGNALFORGE_SERVICES_CONFIG",
+    ) -> None:
         """
         Args:
             env_var: Environment variable containing JSON service list.

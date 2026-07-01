@@ -1,4 +1,5 @@
 """Docker-based service discovery provider using the Docker SDK."""
+
 from __future__ import annotations
 
 import logging
@@ -18,12 +19,24 @@ logger = logging.getLogger(__name__)
 
 # Image name keywords -> service_type
 _IMAGE_TYPE_HINTS = {
-    "postgres": "database", "mysql": "database", "mariadb": "database",
-    "mongo": "database", "mongodb": "database", "redis": "cache",
-    "kafka": "message_queue", "zookeeper": "message_queue",
-    "nginx": "web", "apache": "web", "caddy": "web",
-    "node": "api", "python": "api", "go": "api", "java": "api",
-    "dotnet": "api", "elasticsearch": "search", "kibana": "dashboard",
+    "postgres": "database",
+    "mysql": "database",
+    "mariadb": "database",
+    "mongo": "database",
+    "mongodb": "database",
+    "redis": "cache",
+    "kafka": "message_queue",
+    "zookeeper": "message_queue",
+    "nginx": "web",
+    "apache": "web",
+    "caddy": "web",
+    "node": "api",
+    "python": "api",
+    "go": "api",
+    "java": "api",
+    "dotnet": "api",
+    "elasticsearch": "search",
+    "kibana": "dashboard",
 }
 
 # Docker Compose random suffix pattern
@@ -190,7 +203,11 @@ class DockerDiscoveryProvider(ServiceDiscoveryProvider):
                     )
                 )
             except Exception as exc:  # pragma: no cover
-                logger.debug("Unexpected error scanning container %s: %s", getattr(container, "name", "?"), exc)
+                logger.debug(
+                    "Unexpected error scanning container %s: %s",
+                    getattr(container, "name", "?"),
+                    exc,
+                )
                 continue
 
         return discovered

@@ -1,10 +1,10 @@
 """Service dependency detection and graph models."""
+
 from __future__ import annotations
 
-import uuid
 from collections import deque
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -29,6 +29,7 @@ class ServiceDependency(BaseModel):
     @field_validator("confidence_score")
     @classmethod
     def _check_confidence(cls, v: float) -> float:
+        """Ensure confidence score is between 0.0 and 1.0."""
         if not 0.0 <= v <= 1.0:
             raise ValueError("confidence_score must be between 0.0 and 1.0")
         return v
