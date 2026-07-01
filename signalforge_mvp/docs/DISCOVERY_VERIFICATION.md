@@ -4,6 +4,47 @@ How to verify that **real auto-discovery** is working — not hardcoded data.
 
 ---
 
+## Prerequisites (Must Read)
+
+Before running any `curl` command below, **the backend server must be running**.
+
+### Step 1: Start the Backend (Terminal 1 — keep it open)
+
+```powershell
+cd "C:\Users\dharm\OneDrive\文档\Worthy One\signalforge_mvp\backend"
+.venv\Scripts\Activate.ps1
+.venv\Scripts\alembic.exe upgrade head
+.venv\Scripts\uvicorn.exe app.main:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+**What this does:**
+- Starts the FastAPI backend on `http://localhost:8000`
+- Runs the discovery engine in the background (checks every 30 seconds)
+- Creates the SQLite database if it doesn't exist
+
+**Wait 30 seconds** after startup for the first discovery run to complete.
+
+### Step 2: Run the `curl` commands (Terminal 2 — or PowerShell/Git Bash)
+
+All `curl` commands in this guide run in a **separate terminal** (or in PowerShell/Git Bash) while the backend is running in Terminal 1.
+
+**On Windows, use one of these:**
+
+```powershell
+# PowerShell (recommended — built into Windows)
+curl http://localhost:8000/services/discovered
+
+# Or with full path to Git Bash curl
+"C:\Program Files\Git\mingw64\bin\curl.exe" http://localhost:8000/services/discovered
+
+# Or with Invoke-RestMethod (PowerShell native)
+Invoke-RestMethod -Uri http://localhost:8000/services/discovered
+```
+
+> **Note:** If you see `curl: (7) Failed to connect to localhost port 8000`, the backend is not running. Go back to Terminal 1 and check for errors.
+
+---
+
 ## Table of Contents
 
 1. [What is "Real" Discovery?](#what-is-real-discovery)
@@ -34,6 +75,8 @@ SignalForge discovers services from **your actual environment**, not from a conf
 ---
 
 ## 2. Quick Checks
+
+> **Prerequisite:** Backend must be running. See [Prerequisites](#prerequisites-must-read) above.
 
 ### 2.1 Check Discovered Services
 
@@ -91,6 +134,8 @@ Real services have health checks (`/health`, `/healthz`, `/ready`). If health is
 ---
 
 ## 3. Trigger On-Demand Discovery
+
+> **Prerequisite:** Backend must be running. See [Prerequisites](#prerequisites-must-read) above.
 
 The background discovery runs every 30 seconds. You can also trigger it manually:
 
@@ -323,6 +368,9 @@ If you see services with `discovery_source: "config"` after a fresh start, those
 
 ## Quick Reference Commands
 
+> **Prerequisite:** Backend must be running on `http://localhost:8000`.
+> Run these in **PowerShell** or **Git Bash** while the backend is running.
+
 ```bash
 # Check discovered services (with source)
 curl http://localhost:8000/services/discovered | python -m json.tool
@@ -330,11 +378,11 @@ curl http://localhost:8000/services/discovered | python -m json.tool
 # Trigger discovery manually
 curl -X POST http://localhost:8000/services/discover
 
-# Check only Docker-discovered services
-curl http://localhost:8000/services/discovered | grep "docker"
+# Check only Docker-discovered services (PowerShell)
+curl http://localhost:8000/services/discovered | findstr "docker"
 
-# Check only process-discovered services
-curl http://localhost:8000/services/discovered | grep "process"
+# Check only process-discovered services (PowerShell)
+curl http://localhost:8000/services/discovered | findstr "process"
 
 # Check health of all services
 curl http://localhost:8000/services/health
@@ -344,6 +392,19 @@ curl http://localhost:8000/dependencies/graph
 
 # Check backend health
 curl http://localhost:8000/health
+```
+
+**PowerShell alternatives (no curl installed):**
+
+```powershell
+# Using Invoke-RestMethod (built into PowerShell)
+Invoke-RestMethod -Uri http://localhost:8000/services/discovered | ConvertTo-Json -Depth 3
+
+# Trigger discovery
+Invoke-RestMethod -Uri http://localhost:8000/services/discover -Method POST
+
+# Check health
+Invoke-RestMethod -Uri http://localhost:8000/health
 ```
 
 ---
