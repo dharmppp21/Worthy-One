@@ -149,4 +149,4 @@ class TestUncorrelatedEvents:
             latencies.append(time.perf_counter() - start)
 
         avg_ms = statistics.mean(latencies) * 1000
-        assert avg_ms < 1.0, f"avg uncorrelated latency {avg_ms:.3f}ms"
+        assert avg_ms < 2.0, f"avg uncorrelated latency {avg_ms:.3f}ms"

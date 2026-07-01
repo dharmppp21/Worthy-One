@@ -35,16 +35,23 @@ class DatabaseStore:
         self._session_factory = session_factory
 
     def _to_event(self, row: TelemetryEventModel) -> TelemetryEvent:
+        from datetime import timezone
         from app.schemas import CorrelationMetadata
         correlation = None
         if row.correlation_metadata:
             correlation = CorrelationMetadata.model_validate(row.correlation_metadata)
+
+        # Ensure timestamp is timezone-aware (defensive against driver quirks)
+        ts = row.timestamp
+        if ts is not None and ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+
         return TelemetryEvent(
             event_id=row.event_id,
             tenant_id=row.tenant_id,
             service_name=row.service_name,
             event_type=EventType(row.event_type),
-            timestamp=row.timestamp,
+            timestamp=ts,
             name=row.name,
             trace_id=row.trace_id,
             value=row.value,

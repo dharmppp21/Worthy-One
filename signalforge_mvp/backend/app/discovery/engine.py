@@ -1,11 +1,12 @@
 """
 Discovery engine: orchestrates multiple discovery providers and runs them periodically.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from .base import ServiceDiscoveryProvider
 from .models import DiscoveredService
@@ -86,7 +87,11 @@ class DiscoveryEngine:
                 await self._publisher.publish_service_discovered(service)
             # Track health changes
             if self._publisher is not None:
-                status = service.health_status if hasattr(service, "health_status") and service.health_status else "unknown"
+                status = (
+                    service.health_status
+                    if hasattr(service, "health_status") and service.health_status
+                    else "unknown"
+                )
                 if self._publisher.track_health(service_id, status):
                     # Health changed — publish event (but only if we had a prior value)
                     old_status = self._publisher.get_cached_health(service_id)
@@ -104,7 +109,9 @@ class DiscoveryEngine:
             for service_id, service_name in removed:
                 await self._publisher.publish_service_removed(service_id, service_name)
 
-    async def _safe_discover(self, provider: ServiceDiscoveryProvider) -> List[DiscoveredService]:
+    async def _safe_discover(
+        self, provider: ServiceDiscoveryProvider
+    ) -> List[DiscoveredService]:
         """
         Wrap a provider's discover() in a try/except so that one failing
         provider does not break the whole run.
@@ -133,7 +140,17 @@ class DiscoveryEngine:
             interval_seconds: Sleep interval between discovery runs.
         """
         if self._background_task is not None:
-            logger.warning("Background discovery already running; ignoring start request.")
+            logger.warning(
+                "Background discovery already running; ignoring start request."
+            )
+            return
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            logger.warning(
+                "No running event loop; skipping background discovery startup."
+            )
             return
 
         self._stop_event = asyncio.Event()
@@ -143,13 +160,16 @@ class DiscoveryEngine:
         logger.info("Background discovery started (interval=%ds).", interval_seconds)
 
     def stop_background_discovery(self) -> None:
-        """Signal the background discovery loop to stop."""
+        """Signal and cancel the background discovery loop."""
         if self._background_task is None:
-            logger.warning("Background discovery is not running; ignoring stop request.")
+            logger.warning(
+                "Background discovery is not running; ignoring stop request."
+            )
             return
 
         if self._stop_event is not None:
             self._stop_event.set()
+        self._background_task.cancel()
         self._background_task = None
         logger.info("Background discovery stopped.")
 

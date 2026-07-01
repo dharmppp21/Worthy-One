@@ -3,10 +3,11 @@
 Automatically matches telemetry events to discovered services without requiring
 the client to specify ``service_name``.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from app.discovery.models import DiscoveredService
 from app.discovery.registry import ServiceRegistry
@@ -28,6 +29,7 @@ class CorrelationResult:
         matched_field: Optional[str] = None,
         candidate_count: int = 0,
     ) -> None:
+        """Initialize a CorrelationResult."""
         self.service_id = service_id
         self.service_name = service_name
         self.tenant_id = tenant_id
@@ -37,6 +39,7 @@ class CorrelationResult:
         self.candidate_count = candidate_count
 
     def to_dict(self) -> Dict[str, Any]:
+        """Return a dictionary representation of the result."""
         return {
             "strategy": self.strategy,
             "confidence": self.confidence,
@@ -59,46 +62,48 @@ class EventServiceCorrelator:
         """Attempt to correlate an event to a discovered service.
 
         Strategies are tried in order of priority. The first successful match
-        is returned.
+        is returned. The service list is fetched once and reused across all
+        strategies to avoid redundant database/cache lookups.
 
         Returns:
             CorrelationResult with service_id, confidence, and strategy used.
         """
         attrs = event.attributes or {}
+        services = self._registry.list_services(active_only=True)
 
         # Strategy 1: Exact service name match
         if event.service_name:
-            result = self._match_exact_name(event.service_name)
+            result = self._match_exact_name(event.service_name, services)
             if result:
                 return result
 
         # Strategy 2: Source IP + port match
-        result = self._match_source_ip_port(attrs)
+        result = self._match_source_ip_port(attrs, services)
         if result:
             return result
 
         # Strategy 3: Hostname match
-        result = self._match_hostname(attrs)
+        result = self._match_hostname(attrs, services)
         if result:
             return result
 
         # Strategy 4: Container ID match
-        result = self._match_container_id(attrs)
+        result = self._match_container_id(attrs, services)
         if result:
             return result
 
         # Strategy 5: Pod name match
-        result = self._match_pod_name(attrs)
+        result = self._match_pod_name(attrs, services)
         if result:
             return result
 
         # Strategy 6: Process ID match
-        result = self._match_process_id(attrs)
+        result = self._match_process_id(attrs, services)
         if result:
             return result
 
         # Strategy 7: Trace context match
-        result = self._match_trace_context(attrs)
+        result = self._match_trace_context(attrs, services)
         if result:
             return result
 
@@ -113,9 +118,11 @@ class EventServiceCorrelator:
     # Strategy implementations
     # ------------------------------------------------------------------
 
-    def _match_exact_name(self, service_name: str) -> Optional[CorrelationResult]:
+    def _match_exact_name(
+        self, service_name: str, services: List[DiscoveredService]
+    ) -> Optional[CorrelationResult]:
         """Strategy 1: Exact service name match (case-insensitive)."""
-        for svc in self._registry.list_services(active_only=True):
+        for svc in services:
             if svc.service_name.lower() == service_name.lower():
                 return CorrelationResult(
                     service_id=svc.service_id,
@@ -128,7 +135,9 @@ class EventServiceCorrelator:
                 )
         return None
 
-    def _match_source_ip_port(self, attrs: Dict[str, Any]) -> Optional[CorrelationResult]:
+    def _match_source_ip_port(
+        self, attrs: Dict[str, Any], services: List[DiscoveredService]
+    ) -> Optional[CorrelationResult]:
         """Strategy 2: Match by source IP and port in service endpoints."""
         source_ip = attrs.get("source_ip")
         source_port = attrs.get("source_port")
@@ -141,9 +150,12 @@ class EventServiceCorrelator:
             return None
 
         candidates: List[DiscoveredService] = []
-        for svc in self._registry.list_services(active_only=True):
+        for svc in services:
             for ep in svc.endpoints:
-                if f"tcp://{source_ip}:{port}" in ep or f"http://{source_ip}:{port}" in ep:
+                if (
+                    f"tcp://{source_ip}:{port}" in ep
+                    or f"http://{source_ip}:{port}" in ep
+                ):
                     candidates.append(svc)
                     break
 
@@ -176,14 +188,16 @@ class EventServiceCorrelator:
             )
         return None
 
-    def _match_hostname(self, attrs: Dict[str, Any]) -> Optional[CorrelationResult]:
+    def _match_hostname(
+        self, attrs: Dict[str, Any], services: List[DiscoveredService]
+    ) -> Optional[CorrelationResult]:
         """Strategy 3: Match by hostname or host attribute."""
         hostname = attrs.get("hostname") or attrs.get("host")
         if not hostname:
             return None
 
         candidates: List[DiscoveredService] = []
-        for svc in self._registry.list_services(active_only=True):
+        for svc in services:
             if svc.host.lower() == hostname.lower():
                 candidates.append(svc)
             elif svc.service_name.lower() == hostname.lower():
@@ -217,19 +231,27 @@ class EventServiceCorrelator:
             )
         return None
 
-    def _match_container_id(self, attrs: Dict[str, Any]) -> Optional[CorrelationResult]:
+    def _match_container_id(
+        self, attrs: Dict[str, Any], services: List[DiscoveredService]
+    ) -> Optional[CorrelationResult]:
         """Strategy 4: Match by container ID in service metadata."""
         container_id = attrs.get("container_id")
         if not container_id:
             return None
 
         # Allow partial match (first 12 chars)
-        container_prefix = container_id[:12] if len(container_id) >= 12 else container_id
+        container_prefix = (
+            container_id[:12] if len(container_id) >= 12 else container_id
+        )
 
-        for svc in self._registry.list_services(active_only=True):
+        for svc in services:
             svc_container_id = svc.metadata.get("container_id")
             if svc_container_id:
-                svc_prefix = svc_container_id[:12] if len(svc_container_id) >= 12 else svc_container_id
+                svc_prefix = (
+                    svc_container_id[:12]
+                    if len(svc_container_id) >= 12
+                    else svc_container_id
+                )
                 if svc_prefix.lower() == container_prefix.lower():
                     return CorrelationResult(
                         service_id=svc.service_id,
@@ -242,13 +264,15 @@ class EventServiceCorrelator:
                     )
         return None
 
-    def _match_pod_name(self, attrs: Dict[str, Any]) -> Optional[CorrelationResult]:
+    def _match_pod_name(
+        self, attrs: Dict[str, Any], services: List[DiscoveredService]
+    ) -> Optional[CorrelationResult]:
         """Strategy 5: Match by pod name in service metadata."""
         pod_name = attrs.get("pod_name")
         if not pod_name:
             return None
 
-        for svc in self._registry.list_services(active_only=True):
+        for svc in services:
             svc_pod_name = svc.metadata.get("pod_name")
             if svc_pod_name and svc_pod_name.lower() == pod_name.lower():
                 return CorrelationResult(
@@ -262,7 +286,9 @@ class EventServiceCorrelator:
                 )
         return None
 
-    def _match_process_id(self, attrs: Dict[str, Any]) -> Optional[CorrelationResult]:
+    def _match_process_id(
+        self, attrs: Dict[str, Any], services: List[DiscoveredService]
+    ) -> Optional[CorrelationResult]:
         """Strategy 6: Match by process ID in service metadata."""
         process_id = attrs.get("process_id")
         if process_id is None:
@@ -273,7 +299,7 @@ class EventServiceCorrelator:
         except (ValueError, TypeError):
             return None
 
-        for svc in self._registry.list_services(active_only=True):
+        for svc in services:
             if svc.metadata.get("pid") == pid:
                 return CorrelationResult(
                     service_id=svc.service_id,
@@ -286,7 +312,9 @@ class EventServiceCorrelator:
                 )
         return None
 
-    def _match_trace_context(self, attrs: Dict[str, Any]) -> Optional[CorrelationResult]:
+    def _match_trace_context(
+        self, attrs: Dict[str, Any], services: List[DiscoveredService]
+    ) -> Optional[CorrelationResult]:
         """Strategy 7: Match by trace context (parent span service name)."""
         # This would require a trace backend query; for now, we check if the
         # event attributes already contain a parent span's service name.
@@ -294,7 +322,7 @@ class EventServiceCorrelator:
         if not parent_service:
             return None
 
-        for svc in self._registry.list_services(active_only=True):
+        for svc in services:
             if svc.service_name.lower() == parent_service.lower():
                 return CorrelationResult(
                     service_id=svc.service_id,

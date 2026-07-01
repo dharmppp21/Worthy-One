@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -31,7 +33,7 @@ from app.discovery.dependencies.trace_analyzer import TraceAnalyzer
 from app.discovery.environment import AutoConfigurator
 from app.discovery.engine import DiscoveryEngine
 from app.discovery.registry import ServiceRegistry
-from app.routers.discovery import set_discovery_engine, set_graph_builder
+from app.routers.discovery import set_discovery_engine, set_graph_builder, get_discovery_engine, get_graph_builder
 
 from app.discovery.correlation import EventServiceCorrelator
 from app.services.event_processor import event_processor
@@ -54,12 +56,26 @@ def run_migrations() -> None:
     command.upgrade(alembic_cfg, "head")
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup/shutdown cleanup."""
+    yield
+    # Shutdown: cancel background tasks gracefully
+    engine = get_discovery_engine()
+    if engine is not None:
+        engine.stop_background_discovery()
+    graph_builder = get_graph_builder()
+    if graph_builder is not None:
+        graph_builder.stop_background_build()
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="SignalForge API",
         version="0.1.0",
         docs_url="/docs" if config.is_development() else None,
         redoc_url="/redoc" if config.is_development() else None,
+        lifespan=lifespan,
     )
 
     # CORS — allow local frontend in dev, more restrictive in production

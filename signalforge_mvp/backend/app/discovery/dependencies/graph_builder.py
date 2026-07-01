@@ -1,4 +1,5 @@
 """Dependency graph builder that merges results from multiple analyzers."""
+
 from __future__ import annotations
 
 import asyncio
@@ -10,7 +11,6 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from app.discovery.dependencies.base import BaseDependencyAnalyzer
 from app.discovery.dependencies.models import DependencyGraph, ServiceDependency
 from app.discovery.dependencies.registry import DependencyRegistry
-from app.discovery.models import DiscoveredService
 from app.discovery.registry import ServiceRegistry
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ class DependencyGraphBuilder:
         self._background_task: Optional[asyncio.Task] = None
         self._stop_event: Optional[asyncio.Event] = None
         self._publisher: Optional[Any] = None
+        self._lock = asyncio.Lock()
 
     def set_publisher(self, publisher: Any) -> None:
         """Set the discovery event publisher for broadcasting dependency events."""
@@ -54,38 +55,41 @@ class DependencyGraphBuilder:
     async def build(self) -> DependencyGraph:
         """Run all analyzers, merge results, store in registry, and return graph.
 
+        Uses an asyncio.Lock to prevent concurrent builds from racing.
+
         Returns:
             DependencyGraph built from merged analyzer results.
         """
-        if not self._analyzers:
-            logger.warning("No analyzers configured; returning empty graph.")
-            return DependencyGraph()
+        async with self._lock:
+            if not self._analyzers:
+                logger.warning("No analyzers configured; returning empty graph.")
+                return DependencyGraph()
 
-        # Run all analyzers concurrently
-        results = await asyncio.gather(
-            *[self._safe_analyze(a) for a in self._analyzers],
-            return_exceptions=True,
-        )
+            # Run all analyzers concurrently
+            results = await asyncio.gather(
+                *[self._safe_analyze(a) for a in self._analyzers],
+                return_exceptions=True,
+            )
 
-        # Flatten and collect all dependencies
-        all_deps: List[ServiceDependency] = []
-        for result in results:
-            if isinstance(result, Exception):
-                continue
-            all_deps.extend(result)
+            # Flatten and collect all dependencies
+            all_deps: List[ServiceDependency] = []
+            for result in results:
+                if isinstance(result, Exception):
+                    continue
+                all_deps.extend(result)
 
-        # Merge by (source_id, target_id)
-        merged = self._merge_dependencies(all_deps)
+            # Merge by (source_id, target_id)
+            merged = self._merge_dependencies(all_deps)
 
-        # Store merged dependencies incrementally and publish new ones
-        for dep in merged:
-            is_new = self._dep_registry.store_dependency(dep)
-            if is_new and self._publisher is not None:
-                await self._publisher.publish_dependency_detected(dep)
+            # Store merged dependencies incrementally and publish new ones
+            for dep in merged:
+                is_new = self._dep_registry.store_dependency(dep)
+                if is_new and self._publisher is not None:
+                    await self._publisher.publish_dependency_detected(dep)
 
-        # Build graph with known service nodes
-        services = self._registry.list_services(active_only=True)
-        return self._dep_registry.get_dependency_graph(services)
+            # Build graph with known service nodes
+            services = self._registry.list_services(active_only=True)
+            return self._dep_registry.get_dependency_graph(services)
 
     def get_graph(
         self,
@@ -121,20 +125,29 @@ class DependencyGraphBuilder:
             logger.warning("Background graph builder already running.")
             return
 
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            logger.warning(
+                "No running event loop; skipping background graph builder startup."
+            )
+            return
+
         self._stop_event = asyncio.Event()
-        self._background_task = asyncio.create_task(
-            self._build_loop(interval_seconds)
+        self._background_task = asyncio.create_task(self._build_loop(interval_seconds))
+        logger.info(
+            "Background graph builder started (interval=%ds).", interval_seconds
         )
-        logger.info("Background graph builder started (interval=%ds).", interval_seconds)
 
     def stop_background_build(self) -> None:
-        """Signal the background graph builder loop to stop."""
+        """Signal and cancel the background graph builder loop."""
         if self._background_task is None:
             logger.warning("Background graph builder is not running.")
             return
 
         if self._stop_event is not None:
             self._stop_event.set()
+        self._background_task.cancel()
         self._background_task = None
         logger.info("Background graph builder stopped.")
 
@@ -215,7 +228,9 @@ class DependencyGraphBuilder:
                 last_seen = dep.last_seen_at
 
         # Base confidence (weighted average)
-        base_confidence = weighted_confidence / total_weight if total_weight > 0 else 0.5
+        base_confidence = (
+            weighted_confidence / total_weight if total_weight > 0 else 0.5
+        )
 
         # Multi-analyzer confidence boost
         num_analyzers = len(dep_list)
@@ -227,7 +242,12 @@ class DependencyGraphBuilder:
             confidence = base_confidence
 
         # Determine primary dependency type (prefer most common, or mesh > tracing > traffic > network)
-        type_priority = {"service_mesh": 4, "distributed_tracing": 3, "traffic_logs": 2, "network": 1}
+        type_priority = {
+            "service_mesh": 4,
+            "distributed_tracing": 3,
+            "traffic_logs": 2,
+            "network": 1,
+        }
         best_type = max(all_types, key=lambda t: type_priority.get(t, 0))
 
         return ServiceDependency(
@@ -235,9 +255,15 @@ class DependencyGraphBuilder:
             target_service_id=target_id,
             dependency_type=best_type,
             connection_count=total_connections,
-            avg_latency_ms=(weighted_latency / latency_weight) if latency_weight > 0 else None,
+            avg_latency_ms=(
+                (weighted_latency / latency_weight) if latency_weight > 0 else None
+            ),
             error_rate=(weighted_error / error_weight) if error_weight > 0 else None,
-            last_seen_at=last_seen if last_seen != datetime.min.replace(tzinfo=timezone.utc) else datetime.now(timezone.utc),
+            last_seen_at=(
+                last_seen
+                if last_seen != datetime.min.replace(tzinfo=timezone.utc)
+                else datetime.now(timezone.utc)
+            ),
             confidence_score=confidence,
             discovery_sources=sorted(all_sources),
         )
@@ -246,13 +272,17 @@ class DependencyGraphBuilder:
     # Safe wrapper
     # ------------------------------------------------------------------
 
-    async def _safe_analyze(self, analyzer: BaseDependencyAnalyzer) -> List[ServiceDependency]:
+    async def _safe_analyze(
+        self, analyzer: BaseDependencyAnalyzer
+    ) -> List[ServiceDependency]:
         """Wrap an analyzer's analyze() in try/except so one failing analyzer
         does not break the whole build.
         """
         try:
             if not analyzer.health_check():
-                logger.debug("Analyzer %s is unhealthy; skipping.", analyzer.__class__.__name__)
+                logger.debug(
+                    "Analyzer %s is unhealthy; skipping.", analyzer.__class__.__name__
+                )
                 return []
             return await analyzer.analyze()
         except Exception as exc:
