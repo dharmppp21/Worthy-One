@@ -621,36 +621,4 @@ Before deploying SignalForge to production, verify the following:
 
 ---
 
-## Project Timeline
-
-| Day | Milestone | Status |
-|-----|-----------|--------|
-| 1–7 | Core API: ingest, detect, incidents, anomaly, graph, deployments | ✅ Done |
-| 8–10 | PostgreSQL + Redis + Alembic migrations | ✅ Done |
-| 11–12 | Service graph visualization + Redis pub/sub | ✅ Done |
-| 13–14 | Deployments correlation + Runbook CRUD | ✅ Done |
-| 15–16 | Keyword search + Semantic search via pgvector | ✅ Done |
-| 17–18 | Root cause scoring + AI triage | ✅ Done |
-| 19–20 | WebSocket live updates + Kafka event streaming | ✅ Done |
-| 21 | Decoupled ingestion: API publishes, worker processes | ✅ Done |
-| 22 | Integration tests: ingest-to-incident, graph, runbooks, search | ✅ Done |
-| 23 | Frontend build verification, TypeScript fixes, API error states | ✅ Done |
-| 24 | Load testing: 47.7 RPS, 784ms detection delay, bottleneck identified | ✅ Done |
-| 25 | API key auth + tenant isolation on all endpoints | ✅ Done |
-| 26 | Production hardening: logging, rate limiting, safe errors, health checks | ✅ Done |
-| 27 | Docker Compose full stack, AWS architecture, CI/CD, Terraform | ✅ Done |
-| 28 | README rewrite: architecture, data flow, demo, tradeoffs, scalability | ✅ Done |
-| 29 | Demo seed data script + DEMO.md walkthrough with 8-step narrative and API commands | ✅ Done |
-| 30 | Final QA: tests pass, warnings suppressed, stale files removed, ready for demo | ✅ Done |
-| 31 | Finalization: demo verified end-to-end, architecture summary, interview guide, all docs complete | ✅ Done |
-| 32–35 | Auto-discovery core: pluggable providers, discovery engine, service registry, models, base class | ✅ Done |
-| 36–38 | Discovery providers: Docker, Kubernetes, Process, Config, Cloud with environment auto-detection | ✅ Done |
-| 39–40 | Health probing and auto-classification: HTTP/TCP probes, 7-layer heuristic classification, background tasks | ✅ Done |
-| 41–43 | Event correlation: 7-strategy matching engine, disambiguation, confidence scoring | ✅ Done |
-| 44–45 | Service dependency detection: trace analysis, traffic log parsing, network scanning, graph builder | ✅ Done |
-| 46–48 | Multi-environment integration tests: Docker, K8s, bare metal, mixed (all mocked). Performance benchmarks: discovery latency, correlation accuracy, graph queries, memory profiling | ✅ Done |
-| 49 | Documentation updates: README, ARCHITECTURE_SUMMARY, INTERVIEW_GUIDE, DEMO, AWS_ARCHITECTURE, ENVIRONMENTS, RESUME_BULLETS, INTERVIEW_AUTO_DISCOVERY, PROJECT_STATE | ✅ Done |
-
----
-
 Built in 49 days. Every commit is in the repo. Every decision is documented. Every test passes.
