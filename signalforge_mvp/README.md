@@ -620,5 +620,3 @@ Before deploying SignalForge to production, verify the following:
 - **Auto-remediation:** Runbook automation with step execution and rollback
 
 ---
-
-Built in 49 days. Every commit is in the repo. Every decision is documented. Every test passes.
