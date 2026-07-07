@@ -1,177 +1,67 @@
-# SignalForge — Full Stack Docker Compose
-#
-# This is the default compose file for running SignalForge locally.
-# It includes PostgreSQL, Redis, Redpanda (Kafka-compatible), the backend,
-# frontend, and an optional simulator profile.
-#
-# The backend automatically discovers other containers in the same Docker
-# network when discovery is enabled. It needs read-only access to the Docker
-# socket for container introspection.
-#
-# Quick start:
-#   docker-compose up -d                     # Start all services
-#   docker-compose --profile simulator up -d   # Start + simulator
-#   docker-compose down                        # Stop everything
-#   docker-compose down -v                     # Stop + wipe data volumes
-#
-# Health checks on postgres, redis, and redpanda ensure the backend
-# only starts after its dependencies are ready.
-#
-# For local development with live reloading, use docker-compose.override.yml.
-# For production hardening, use docker-compose.prod.yml.
-#
-#   docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+﻿version: "3.9"
 
 services:
-  # ------------------------------------------------------------------
-  # PostgreSQL 16 — durable storage, Alembic migrations, pgvector
-  # ------------------------------------------------------------------
-  postgres:
-    image: postgres:16-alpine
-    container_name: signforge-postgres
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: signalforge-backend
     environment:
-      POSTGRES_USER: signforge
-      POSTGRES_PASSWORD: signforge
-      POSTGRES_DB: signforge
+      - DATABASE_URL=postgresql://signalforge:signalforge@postgres:5432/signalforge
+      - REDIS_URL=redis://redis:6379/0
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - LOG_LEVEL=info
+      - SERVICE_PORT=8000
     ports:
-      - "5432:5432"
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: signalforge-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+  postgres:
+    # pgvector-enabled Postgres 16 â€” the embeddings migration requires the
+    # `vector` extension, which stock postgres:16-alpine does not ship.
+    image: pgvector/pgvector:pg16
+    container_name: signalforge-postgres
+    environment:
+      POSTGRES_USER: signalforge
+      POSTGRES_PASSWORD: signalforge
+      POSTGRES_DB: signalforge
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U signforge -d signforge"]
+      test: ["CMD-SHELL", "pg_isready -U signalforge"]
       interval: 5s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
 
-  # ------------------------------------------------------------------
-  # Redis 7 — hot state: rolling windows, pub/sub, TTL auto-cleanup
-  # ------------------------------------------------------------------
   redis:
     image: redis:7-alpine
-    container_name: signforge-redis
-    ports:
-      - "6379:6379"
+    container_name: signalforge-redis
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
-      timeout: 5s
+      timeout: 3s
       retries: 5
-    restart: unless-stopped
-
-  # ------------------------------------------------------------------
-  # Redpanda — Kafka-compatible event streaming (single-node for local)
-  # ------------------------------------------------------------------
-  redpanda:
-    image: docker.redpanda.com/redpandadata/redpanda:latest
-    container_name: signforge-redpanda
-    command:
-      - redpanda
-      - start
-      - --overprovisioned
-      - --smp 1
-      - --memory 1G
-      - --reserve-memory 0M
-      - --node-id 0
-      - --check=false
-      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
-      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
-    ports:
-      - "9092:9092"
-      - "19092:19092"
-      - "9644:9644"
-    volumes:
-      - redpanda_data:/var/lib/redpanda/data
-    healthcheck:
-      test: ["CMD", "rpk", "cluster", "info", "--brokers", "localhost:9092"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-
-  # ------------------------------------------------------------------
-  # Backend — FastAPI + auto-discovery + event processing
-  # ------------------------------------------------------------------
-  # The backend discovers containers, services, and processes.
-  # Docker socket access (read-only) enables container introspection.
-  # pid: host lets the backend see host processes for process discovery.
-  # This is a security trade-off; disable process discovery in production.
-  # ------------------------------------------------------------------
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: signforge-backend
-    ports:
-      - "8000:8000"
-    environment:
-      DATABASE_URL: postgresql+psycopg2://signforge:signforge@postgres:5432/signforge
-      REDIS_URL: redis://redis:6379/0
-      KAFKA_BROKERS: redpanda:9092
-      LOG_LEVEL: INFO
-      ENVIRONMENT: production
-      RATE_LIMIT_RPS: "200"
-      # --- Auto-discovery settings ---
-      SIGNALFORGE_DISCOVERY_ENABLED: "true"
-      SIGNALFORGE_DISCOVERY_INTERVAL: "30"
-      SIGNALFORGE_DISCOVERY_PROVIDERS: "docker,process,config"
-    volumes:
-      # Read-only access to Docker socket for container discovery
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    # Share host process namespace for process discovery
-    # SECURITY NOTE: This exposes host processes. Use only in local dev.
-    # In production, disable process discovery and use config/K8s providers.
-    pid: host
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      redpanda:
-        condition: service_healthy
-    restart: unless-stopped
-
-  # ------------------------------------------------------------------
-  # Frontend — React dashboard served via nginx
-  # Proxies /api/* to the backend service in the Docker network.
-  # ------------------------------------------------------------------
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: signforge-frontend
-    ports:
-      - "80:80"
-    environment:
-      - NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx
-    depends_on:
-      - backend
-    restart: unless-stopped
-
-  # ------------------------------------------------------------------
-  # Simulator — generates realistic traffic (optional, profile: simulator)
-  # One-off container that exits after sending all events.
-  # ------------------------------------------------------------------
-  simulator:
-    build:
-      context: ./simulator
-      dockerfile: Dockerfile
-    container_name: signforge-simulator
-    environment:
-      API_URL: http://backend:8000
-      TENANT_ID: demo-company
-      PHASES: "100"
-      INTERVAL: "0.1"
-    depends_on:
-      - backend
-    profiles:
-      - simulator
-    restart: "no"
 
 volumes:
   postgres_data:
   redis_data:
-  redpanda_data:
