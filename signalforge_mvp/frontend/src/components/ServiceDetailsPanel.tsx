@@ -10,7 +10,7 @@ function formatDate(iso: string): string {
 }
 
 function uptimePercent(svc: DiscoveredService, health?: ServiceHealth) {
-  if (health) return `${health.uptime_percentage.toFixed(1)}%`;
+  if (health?.uptime_percentage !== undefined) return `${health.uptime_percentage.toFixed(1)}%`;
   const first = new Date(svc.first_seen_at).getTime();
   const now = Date.now();
   const total = now - first;
@@ -26,7 +26,17 @@ export default function ServiceDetailsPanel({
   health?: ServiceHealth;
   onClose: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState<"overview" | "incidents" | "dependencies" | "runbooks" | "metadata">("overview");
+  const [activeTab, setActiveTabState] = useState<"overview" | "incidents" | "dependencies" | "runbooks" | "metadata">(() => {
+    const saved = localStorage.getItem("signalforge:detailTab");
+    if (saved && ["overview", "incidents", "dependencies", "runbooks", "metadata"].includes(saved)) {
+      return saved as "overview" | "incidents" | "dependencies" | "runbooks" | "metadata";
+    }
+    return "overview";
+  });
+  const setActiveTab = (tab: typeof activeTab) => {
+    localStorage.setItem("signalforge:detailTab", tab);
+    setActiveTabState(tab);
+  };
 
   const { data: incidents } = useQuery({
     queryKey: ["incidents-by-service", service.service_name],
@@ -40,7 +50,7 @@ export default function ServiceDetailsPanel({
     enabled: activeTab === "runbooks",
   });
 
-  const { data: graphData } = useQuery({
+  const { data: graphData, isLoading: graphLoading } = useQuery({
     queryKey: ["auto-graph"],
     queryFn: () => fetchAutoGraph(),
     enabled: activeTab === "dependencies",
@@ -105,7 +115,7 @@ export default function ServiceDetailsPanel({
                 <div className="detail-section">
                   <h4>Health</h4>
                   <p><strong>Status:</strong> {health.status}</p>
-                  <p><strong>Response time:</strong> {health.response_time_ms.toFixed(1)} ms</p>
+                  <p><strong>Response time:</strong> {health.response_time_ms?.toFixed(1) ?? "?"} ms</p>
                   <p><strong>Last probe:</strong> {formatDate(health.last_probe_at)}</p>
                 </div>
               )}
@@ -137,8 +147,22 @@ export default function ServiceDetailsPanel({
           {activeTab === "dependencies" && (
             <div className="detail-section">
               <h4>Dependencies (1 hop)</h4>
-              {neighbors.length === 0 ? (
-                <p className="empty-hint">No dependencies detected.</p>
+              {graphLoading ? (
+                <p className="empty-hint">Loading dependency graph...</p>
+              ) : graphData === undefined ? (
+                <div>
+                  <p className="empty-hint">Dependency graph not available.</p>
+                  <p style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
+                    Run dependency analysis from the backend to populate this data.
+                  </p>
+                </div>
+              ) : neighbors.length === 0 ? (
+                <div>
+                  <p className="empty-hint">No dependencies detected for this service.</p>
+                  <p style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
+                    This service has no recorded connections in the dependency graph.
+                  </p>
+                </div>
               ) : (
                 <ul style={{ listStyle: "none", padding: 0 }}>
                   {neighbors.map((e: AutoDependencyEdge) => {
@@ -148,7 +172,7 @@ export default function ServiceDetailsPanel({
                       <li key={`${e.source}->${e.target}`} style={{ padding: "8px 0", borderBottom: "1px solid #f3f4f6" }}>
                         <strong>{isOutgoing ? "→" : "←"} {other}</strong>
                         <span style={{ fontSize: 12, color: "#6b7280", marginLeft: 8 }}>
-                          {e.dependency_type} · confidence {e.confidence.toFixed(2)} · {e.connection_count} reqs · {e.avg_latency_ms.toFixed(0)}ms
+                          {e.dependency_type} · confidence {e.confidence?.toFixed(2) ?? "?"} · {e.connection_count ?? "?"} reqs · {e.avg_latency_ms?.toFixed(0) ?? "?"}ms
                         </span>
                       </li>
                     );

@@ -5,7 +5,7 @@ import {
   searchKnowledgeBase, updateIncidentStatus, ApiError,
   fetchDiscoveredServices, fetchAutoGraph, fetchServicesHealth,
 } from "./api";
-import { fetchRunbooks, createRunbook, deleteRunbook } from "./api";
+import { fetchRunbooks, createRunbook, deleteRunbook, API_BASE_URL } from "./api";
 import { RunbookPanel } from "./components/RunbookPanel";
 import { ServiceGraphView } from "./components/ServiceGraph";
 import ServiceTopologyMap from "./components/ServiceTopologyMap";
@@ -13,7 +13,7 @@ import ServiceDetailsPanel from "./components/ServiceDetailsPanel";
 import DiscoveryEventFeed from "./components/DiscoveryEventFeed";
 import type { Incident, IncidentTimelineEntry, AITriageResponse, RootCauseResponse, Runbook, SearchResultItem, DiscoveredService, DiscoveryEvent } from "./types";
 import "./App.css";
-
+const WS_BASE_URL = API_BASE_URL.replace(/^http/, "ws");
 const queryClient = new QueryClient();
 
 /* ─────────── Helpers ─────────── */
@@ -490,7 +490,17 @@ function EmptyState() {
 
 /* ─────────── Dashboard ─────────── */
 function Dashboard() {
-  const [activeTab, setActiveTab] = useState<"incidents" | "graph" | "runbooks" | "search" | "topology" | "discovery">("incidents");
+  const [activeTab, setActiveTabState] = useState<"incidents" | "graph" | "runbooks" | "search" | "topology" | "discovery">(() => {
+    const saved = localStorage.getItem("signalforge:activeTab");
+    if (saved && ["incidents", "graph", "runbooks", "search", "topology", "discovery"].includes(saved)) {
+      return saved as "incidents" | "graph" | "runbooks" | "search" | "topology" | "discovery";
+    }
+    return "incidents";
+  });
+  const setActiveTab = (tab: typeof activeTab) => {
+    localStorage.setItem("signalforge:activeTab", tab);
+    setActiveTabState(tab);
+  };
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
   const [selectedService, setSelectedService] = useState<DiscoveredService | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -498,81 +508,149 @@ function Dashboard() {
   const [discoveryEvents, setDiscoveryEvents] = useState<DiscoveryEvent[]>([]);
   const queryClient = useQueryClient();
 
-  // WebSocket for live incident updates
+  // WebSocket for live incident updates (with health-check gate + reconnect)
   useEffect(() => {
-    const ws = new WebSocket("ws://127.0.0.1:8000/ws/incidents");
+    let ws: WebSocket | null = null;
     let pingInterval: ReturnType<typeof setInterval>;
+    let reconnectTimeout: ReturnType<typeof setTimeout>;
+    let reconnectAttempt = 0;
+    const MAX_RECONNECT = 5;
+    const BASE_DELAY = 2000;
 
-    ws.onopen = () => {
-      // Keep connection alive with periodic pings
-      pingInterval = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send("ping");
-        }
-      }, 30000);
-    };
-
-    ws.onmessage = (event) => {
+    function connect() {
       try {
-        const msg: {
-        type?: string;
-        incident?: { id?: string };
-      } = JSON.parse(event.data);
-        if (msg.type === "incident_created" || msg.type === "incident_updated") {
-          // Invalidate the incidents query to trigger a refetch
-          queryClient.invalidateQueries({ queryKey: ["incidents"] });
-          // Also invalidate the specific incident if it's the one being viewed
-          if (msg.incident?.id) {
-            queryClient.invalidateQueries({ queryKey: ["incident", msg.incident.id] });
+        ws = new WebSocket(`${WS_BASE_URL}/ws/incidents`);
+
+        ws.onopen = () => {
+          reconnectAttempt = 0;
+          pingInterval = setInterval(() => {
+            if (ws?.readyState === WebSocket.OPEN) {
+              ws.send("ping");
+            }
+          }, 30000);
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const msg: { type?: string; incident?: { id?: string } } = JSON.parse(event.data);
+            if (msg.type === "incident_created" || msg.type === "incident_updated") {
+              queryClient.invalidateQueries({ queryKey: ["incidents"] });
+              if (msg.incident?.id) {
+                queryClient.invalidateQueries({ queryKey: ["incident", msg.incident.id] });
+              }
+            }
+          } catch {
+            // Ignore non-JSON messages
           }
-        }
+        };
+
+        ws.onclose = () => {
+          clearInterval(pingInterval);
+          if (reconnectAttempt < MAX_RECONNECT) {
+            const delay = Math.min(BASE_DELAY * 2 ** reconnectAttempt, 30000);
+            reconnectTimeout = setTimeout(() => {
+              reconnectAttempt++;
+              connect();
+            }, delay);
+          }
+        };
+
+        ws.onerror = () => {
+          // Silently ignore — onclose will trigger reconnect or give up
+        };
       } catch {
-        // Ignore non-JSON messages
+        // WebSocket constructor failed — ignore
       }
-    };
+    }
 
-    ws.onclose = () => {
-      clearInterval(pingInterval);
-    };
-
-    ws.onerror = () => {
-      // WebSocket error — polling will continue as fallback
-    };
+    // Gate: only connect if backend health endpoint is reachable
+    fetch(`${API_BASE_URL}/health`, { mode: "no-cors" })
+      .then(() => connect())
+      .catch(() => {
+        // Backend down — skip WebSocket entirely, no console spam
+      });
 
     return () => {
       clearInterval(pingInterval);
-      ws.close();
+      clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
     };
   }, [queryClient]);
 
-  // Discovery WebSocket for real-time topology updates
+  // Discovery WebSocket for real-time topology updates (with health-check gate + reconnect)
   useEffect(() => {
-    const ws = new WebSocket("ws://127.0.0.1:8000/ws/discovery");
-    ws.onmessage = (event) => {
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout>;
+    let reconnectAttempt = 0;
+    const MAX_RECONNECT = 5;
+    const BASE_DELAY = 2000;
+
+    function connect() {
       try {
-        const msg = JSON.parse(event.data);
-        if (msg.type && msg.service_name) {
-          setDiscoveryEvents((prev) => [
-            ...prev.slice(-99),
-            {
-              type: msg.type,
-              service_name: msg.service_name,
-              detail: msg.detail || "",
-              severity: msg.severity || "info",
-              timestamp: msg.timestamp || new Date().toISOString(),
-            },
-          ]);
-          // Invalidate topology queries so TanStack Query refetches
-          queryClient.invalidateQueries({ queryKey: ["discovered-services"] });
-          queryClient.invalidateQueries({ queryKey: ["auto-graph"] });
-          queryClient.invalidateQueries({ queryKey: ["services-health"] });
-        }
+        ws = new WebSocket(`${WS_BASE_URL}/ws/discovery`);
+
+        ws.onopen = () => {
+          reconnectAttempt = 0;
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type && msg.service_name) {
+              setDiscoveryEvents((prev) => [
+                ...prev.slice(-99),
+                {
+                  type: msg.type,
+                  service_name: msg.service_name,
+                  detail: msg.detail || "",
+                  severity: msg.severity || "info",
+                  timestamp: msg.timestamp || new Date().toISOString(),
+                },
+              ]);
+              queryClient.invalidateQueries({ queryKey: ["discovered-services"] });
+              queryClient.invalidateQueries({ queryKey: ["auto-graph"] });
+              queryClient.invalidateQueries({ queryKey: ["services-health"] });
+            }
+          } catch {
+            // Ignore non-JSON
+          }
+        };
+
+        ws.onclose = () => {
+          if (reconnectAttempt < MAX_RECONNECT) {
+            const delay = Math.min(BASE_DELAY * 2 ** reconnectAttempt, 30000);
+            reconnectTimeout = setTimeout(() => {
+              reconnectAttempt++;
+              connect();
+            }, delay);
+          }
+        };
+
+        ws.onerror = () => {
+          // Silently ignore — onclose handles reconnect or give-up
+        };
       } catch {
-        // Ignore non-JSON
+        // WebSocket constructor failed — ignore
+      }
+    }
+
+    // Gate: only connect if backend health endpoint is reachable
+    fetch(`${API_BASE_URL}/health`, { mode: "no-cors" })
+      .then(() => connect())
+      .catch(() => {
+        // Backend down — skip WebSocket entirely, no console spam
+      });
+
+    return () => {
+      clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
       }
     };
-    ws.onerror = () => {};
-    return () => ws.close();
   }, [queryClient]);
 
   const {
@@ -932,7 +1010,7 @@ function Dashboard() {
 
       {/* Discovery Feed Tab */}
       {activeTab === "discovery" && (
-        <DiscoveryEventFeed events={discoveryEvents} />
+        <DiscoveryEventFeed events={discoveryEvents} services={discoveredServices || []} />
       )}
 
     </main>
