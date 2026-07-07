@@ -131,6 +131,9 @@ class ServiceProber:
         """
         service_id = service.service_id
         host = service.host
+        # Normalize bind-all addresses to localhost for probing
+        if host in ("0.0.0.0", "::", "::0", "*"):
+            host = "127.0.0.1"
         port = _extract_http_port(service.endpoints)
         base_url = f"http://{host}:{port}"
 
@@ -208,7 +211,10 @@ class ServiceProber:
             A HealthProbeResult with the outcome of the probe.
         """
         service_id = service.service_id
+        # Normalize 0.0.0.0 / :: to 127.0.0.1 for probing (bind-all -> localhost)
         host = service.host
+        if host in ("0.0.0.0", "::", "::0", "*"):
+            host = "127.0.0.1"
         start = time.monotonic()
         try:
             reader, writer = await asyncio.wait_for(
@@ -414,10 +420,17 @@ class ServiceProber:
             new_status = result.status.value
             service.health_status = new_status
 
-            # Persist updated health status
+            # Persist updated health status and probe result
             try:
                 self._registry.update_health_status(service.service_id, new_status)
                 self._registry.update_heartbeat(service.service_id)
+                self._registry.store_health_probe(
+                    service_id=service.service_id,
+                    status=new_status,
+                    response_time_ms=getattr(result, 'response_time_ms', None),
+                    response_status_code=getattr(result, 'response_status_code', None),
+                    error_message=getattr(result, 'error_message', None),
+                )
             except ValueError:
                 pass
 
