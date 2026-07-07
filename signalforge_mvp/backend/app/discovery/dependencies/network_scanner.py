@@ -18,6 +18,28 @@ except ImportError:  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 
+# Ephemeral port range — outbound client connections, not server services
+_EPHEMERAL_PORT_MIN = 49152
+
+# Common browser / system process names to skip as sources
+_BROWSER_PROCESSES = frozenset({
+    "chrome", "firefox", "msedge", "safari", "opera", "brave",
+    "discord", "spotify", "steam", "epicgameslauncher",
+    "code", "cursor", "warp", "terminal", "windowsterminal",
+})
+
+# Well-known external/cloud IPs to skip
+_EXTERNAL_IP_PREFIXES = (
+    "8.8.8.", "8.8.4.",       # Google DNS
+    "1.1.1.", "1.0.0.",       # Cloudflare DNS
+    "208.67.",                  # OpenDNS
+    "9.9.9.",                   # Quad9
+    "142.250.", "172.217.",    # Google
+    "13.107.", "20.190.",      # Microsoft
+    "31.13.", "157.240.",      # Facebook/Meta
+    "104.16.", "104.17.",      # Cloudflare
+)
+
 # Port -> dependency_type inference
 _PORT_TYPE_MAP = {
     5432: "database",
@@ -34,6 +56,42 @@ _PORT_TYPE_MAP = {
 }
 
 
+def _is_ephemeral_connection(conn) -> bool:
+    """Return True if this looks like an ephemeral outbound connection."""
+    if conn.laddr and conn.laddr.port >= _EPHEMERAL_PORT_MIN:
+        return True
+    if conn.raddr and conn.raddr.port >= _EPHEMERAL_PORT_MIN:
+        return True
+    return False
+
+
+def _is_external_target(ip: str) -> bool:
+    """Return True if target IP is a known external/cloud service."""
+    if ip in ("127.0.0.1", "::1", "localhost", "0.0.0.0", "::"):
+        return False
+    if ip.startswith("10.") or ip.startswith("192.168."):
+        return False
+    if ip.startswith("172."):
+        try:
+            second = int(ip.split(".")[1])
+            if 16 <= second <= 31:
+                return False
+        except (ValueError, IndexError):
+            pass
+    for prefix in _EXTERNAL_IP_PREFIXES:
+        if ip.startswith(prefix):
+            return True
+    return False
+
+
+def _is_browser_process(name: str) -> bool:
+    """Return True if process name looks like a browser or desktop app."""
+    name_clean = name.lower()
+    if name_clean.endswith(".exe"):
+        name_clean = name_clean[:-4]
+    return name_clean in _BROWSER_PROCESSES or any(b in name_clean for b in _BROWSER_PROCESSES)
+
+
 def _infer_dependency_type(port: int) -> str:
     """Infer dependency type from remote port number."""
     return _PORT_TYPE_MAP.get(port, "unknown")
@@ -43,10 +101,6 @@ class NetworkConnectionScanner(BaseDependencyAnalyzer):
     """Scans active network connections to infer service dependencies."""
 
     def __init__(self, registry: ServiceRegistry) -> None:
-        """
-        Args:
-            registry: ServiceRegistry for looking up services by PID or endpoint.
-        """
         self._registry = registry
 
     async def analyze(self) -> List[ServiceDependency]:
@@ -76,16 +130,36 @@ class NetworkConnectionScanner(BaseDependencyAnalyzer):
             remote_ip = conn.raddr.ip
             remote_port = conn.raddr.port
 
-            # Find source service by PID
-            source_service = self._find_service_by_pid(conn.pid)
-            if not source_service:
+            # Skip ephemeral outbound connections (browser, apps)
+            if _is_ephemeral_connection(conn):
                 continue
 
-            # Find target service by endpoint
+            # Skip external/cloud targets (DNS, Google, etc.)
+            if _is_external_target(remote_ip):
+                continue
+
+            # Skip browser/desktop app sources
+            proc_name = ""
+            try:
+                if conn.pid:
+                    proc = psutil.Process(conn.pid)
+                    proc_name = proc.name()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+            if _is_browser_process(proc_name):
+                continue
+
+            # Find source service by PID (primary) or local endpoint (fallback)
+            source_service = self._find_service_by_pid(conn.pid)
+            if not source_service and conn.laddr:
+                source_service = self._find_service_by_endpoint(
+                    conn.laddr.ip, conn.laddr.port
+                )
+
+            # Only create edges if we know BOTH source AND target
             target_service = self._find_service_by_endpoint(remote_ip, remote_port)
-            if not target_service:
-                # Create an inferred placeholder
-                target_service = self._create_inferred_service(remote_ip, remote_port)
+            if not source_service or not target_service:
+                continue
 
             key = (source_service.service_id, (remote_ip, remote_port))
             grouped[key] += 1
@@ -102,28 +176,27 @@ class NetworkConnectionScanner(BaseDependencyAnalyzer):
 
             dep_type = _infer_dependency_type(remote_port)
 
-            # Try to find the actual target service_id for known services
             target_service = self._find_service_by_endpoint(remote_ip, remote_port)
-            target_id = (
-                target_service.service_id
-                if target_service
-                else self._inferred_service_id(remote_ip, remote_port)
-            )
-
-            confidence = 0.8 if target_service else 0.3
+            if not target_service:
+                continue  # Should not happen since we filtered above
 
             dependencies.append(
                 ServiceDependency(
                     source_service_id=source_id,
-                    target_service_id=target_id,
+                    target_service_id=target_service.service_id,
                     dependency_type=dep_type,
                     connection_count=count,
                     last_seen_at=datetime.now(timezone.utc),
-                    confidence_score=confidence,
+                    confidence_score=0.8,
                     discovery_sources=["network"],
                 )
             )
 
+        logger.info(
+            "NetworkConnectionScanner: %d connections scanned, %d real dependencies found",
+            len(connections),
+            len(dependencies),
+        )
         return dependencies
 
     def _find_service_by_pid(self, pid: Optional[int]) -> Optional[Any]:
@@ -152,22 +225,3 @@ class NetworkConnectionScanner(BaseDependencyAnalyzer):
                     except (ValueError, IndexError):
                         continue
         return None
-
-    def _inferred_service_id(self, ip: str, port: int) -> str:
-        """Generate a deterministic service_id for an inferred service."""
-        return f"inferred-{ip.replace('.', '-')}-{port}"
-
-    def _create_inferred_service(self, ip: str, port: int) -> Any:
-        """Create a placeholder DiscoveredService for an inferred target."""
-        from app.discovery.models import DiscoveredService
-
-        dep_type = _infer_dependency_type(port)
-        return DiscoveredService(
-            service_id=self._inferred_service_id(ip, port),
-            service_name=f"inferred-{dep_type}-{ip}-{port}",
-            service_type=dep_type,
-            endpoints=[f"tcp://{ip}:{port}"],
-            host=ip,
-            metadata={"inferred": True, "port": port},
-            discovery_source="inferred",
-        )
