@@ -167,8 +167,12 @@ async def test_scan_skips_listen_connections(scanner, registry):
 
 
 @pytest.mark.asyncio
-async def test_scan_inferred_service(scanner, registry):
-    """If remote endpoint is not in registry, create inferred service with low confidence."""
+async def test_scan_skips_unregistered_target(scanner, registry):
+    """If the remote endpoint is not a known service, no dependency is reported.
+
+    The scanner only emits real edges where BOTH the source and the target are
+    registered services — it does not fabricate 'inferred' targets.
+    """
     svc_source = DiscoveredService(
         service_name="worker",
         host="127.0.0.1",
@@ -185,12 +189,7 @@ async def test_scan_inferred_service(scanner, registry):
         mock_psutil.CONN_ESTABLISHED = "ESTABLISHED"
         result = await scanner.analyze()
 
-    assert len(result) == 1
-    dep = result[0]
-    assert dep.source_service_id == svc_source.service_id
-    assert dep.dependency_type == "cache"
-    assert dep.confidence_score == 0.3
-    assert dep.target_service_id.startswith("inferred-")
+    assert result == []
 
 
 @pytest.mark.asyncio

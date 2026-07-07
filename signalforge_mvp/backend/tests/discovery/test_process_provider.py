@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.discovery.models import DiscoveredService
-from app.discovery.providers.process import ProcessDiscoveryProvider, _is_system_process, _get_service_name_from_exe, _get_service_type_from_port
+from app.discovery.providers.process import ProcessDiscoveryProvider, _is_system_process, _get_service_name_from_exe, _get_service_type_from_ports
 
 
 @pytest.fixture
@@ -34,13 +34,13 @@ def test_get_service_name_from_exe():
     assert _get_service_name_from_exe(None, "myapp") == "myapp"
 
 
-def test_get_service_type_from_port():
-    assert _get_service_type_from_port(80) == "web"
-    assert _get_service_type_from_port(5432) == "database"
-    assert _get_service_type_from_port(6379) == "cache"
-    assert _get_service_type_from_port(9092) == "message_queue"
-    assert _get_service_type_from_port(8080) == "api"
-    assert _get_service_type_from_port(99999) == "unknown"
+def test_get_service_type_from_ports():
+    assert _get_service_type_from_ports([80]) == "web"
+    assert _get_service_type_from_ports([5432]) == "database"
+    assert _get_service_type_from_ports([6379]) == "cache"
+    assert _get_service_type_from_ports([9092]) == "message_queue"
+    assert _get_service_type_from_ports([8080]) == "api"
+    assert _get_service_type_from_ports([99999]) == "unknown"
 
 
 # ------------------------------------------------------------------

@@ -215,9 +215,14 @@ def make_all_containers() -> list[FakeContainer]:
 # ------------------------------------------------------------------
 
 class FakeConnection:
-    """Lightweight fake that mimics a psutil _sconn namedtuple."""
+    """Lightweight fake that mimics a psutil _sconn namedtuple.
 
-    class _Raddr:
+    Real psutil exposes ``laddr``/``raddr`` as ``addr(ip, port)`` namedtuples,
+    so both must support attribute access (``.ip``/``.port``). We mirror that
+    here for both endpoints.
+    """
+
+    class _Addr:
         def __init__(self, ip: str, port: int) -> None:
             self.ip = ip
             self.port = port
@@ -235,8 +240,8 @@ class FakeConnection:
         self.fd = fd
         self.family = family
         self.type = type_
-        self.laddr = laddr
-        self.raddr = self._Raddr(raddr[0], raddr[1]) if raddr else None
+        self.laddr = self._Addr(laddr[0], laddr[1]) if laddr else ()
+        self.raddr = self._Addr(raddr[0], raddr[1]) if raddr else None
         self.status = status
         self.pid = pid
 

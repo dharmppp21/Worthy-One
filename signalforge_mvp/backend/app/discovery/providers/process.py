@@ -62,8 +62,12 @@ _PORT_TYPE_MAP = {
     443: "web",
     5432: "database",
     3306: "database",
+    33060: "database",  # MySQL X Protocol
     27017: "database",
+    27018: "database",  # MongoDB shards
+    27019: "database",  # MongoDB config server
     6379: "cache",
+    6380: "cache",  # Redis secondary
     11211: "cache",
     9092: "message_queue",
     8080: "api",
@@ -72,6 +76,16 @@ _PORT_TYPE_MAP = {
     8000: "api",
     9200: "search",
     5601: "dashboard",
+    15672: "message_queue",  # RabbitMQ management
+    5672: "message_queue",   # RabbitMQ AMQP
+    4222: "message_queue",   # NATS
+    7474: "database",        # Neo4j
+    7687: "database",        # Neo4j Bolt
+    9042: "database",        # Cassandra
+    5984: "database",        # CouchDB
+    8529: "database",        # ArangoDB
+    26257: "database",       # CockroachDB
+    5433: "database",        # CockroachDB secondary
 }
 
 # Executable name keywords -> service_name hint
@@ -85,14 +99,39 @@ _EXE_NAME_HINTS = {
     "redis": "redis",
     "mongod": "mongodb",
     "mysql": "mysql",
+    "mysqld": "mysql",
     "mariadb": "mariadb",
+    "mariadbd": "mariadb",
     "kafka": "kafka",
     "zookeeper": "zookeeper",
     "elasticsearch": "elasticsearch",
     "kibana": "kibana",
     "go": "go-app",
     "dotnet": "dotnet-app",
+    "cassandra": "cassandra",
+    "couchdb": "couchdb",
+    "neo4j": "neo4j",
+    "rabbitmq": "rabbitmq",
+    "nats-server": "nats",
+    "nats": "nats",
+    "cockroach": "cockroachdb",
+    "arangod": "arangodb",
 }
+
+
+def _get_service_type_from_ports(ports: List[int]) -> str:
+    """Infer service type from listening ports. Uses best match."""
+    # Priority order: database > cache > message_queue > web > api > search > dashboard > unknown
+    priority = {"database": 6, "cache": 5, "message_queue": 4, "web": 3, "api": 2, "search": 1, "dashboard": 0, "unknown": -1}
+    best_type = "unknown"
+    best_score = -1
+    for port in ports:
+        svc_type = _PORT_TYPE_MAP.get(port, "unknown")
+        score = priority.get(svc_type, -1)
+        if score > best_score:
+            best_score = score
+            best_type = svc_type
+    return best_type
 
 
 def _get_service_name_from_exe(exe_path: Optional[str], fallback_name: str) -> str:
@@ -106,11 +145,6 @@ def _get_service_name_from_exe(exe_path: Optional[str], fallback_name: str) -> s
                 return hint
         return base
     return fallback_name
-
-
-def _get_service_type_from_port(port: int) -> str:
-    """Infer service type from listening port."""
-    return _PORT_TYPE_MAP.get(port, "unknown")
 
 
 def _is_system_process(name: str) -> bool:
@@ -187,9 +221,9 @@ class ProcessDiscoveryProvider(ServiceDiscoveryProvider):
                 if not listening_addrs:
                     continue
 
-                # Determine service type from the first listening port
-                first_port = listening_addrs[0][1]
-                service_type = _get_service_type_from_port(first_port)
+                # Determine service type from all listening ports (best match)
+                ports = [port for _, port in listening_addrs]
+                service_type = _get_service_type_from_ports(ports)
 
                 endpoints = [f"tcp://{ip}:{port}" for ip, port in listening_addrs]
                 host = listening_addrs[0][0]

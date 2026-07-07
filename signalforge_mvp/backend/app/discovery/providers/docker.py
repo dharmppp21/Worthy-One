@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from app.discovery.base import ServiceDiscoveryProvider
 from app.discovery.models import DiscoveredService
-from app.discovery.providers.process import _get_service_type_from_port
+from app.discovery.providers.process import _get_service_type_from_ports
 
 try:
     import docker
@@ -165,7 +165,7 @@ class DockerDiscoveryProvider(ServiceDiscoveryProvider):
                     for ep in endpoints:
                         try:
                             port = int(ep.split(":")[-1])
-                            inferred = _get_service_type_from_port(port)
+                            inferred = _get_service_type_from_ports([port])
                             if inferred != "unknown":
                                 service_type = inferred
                                 break
