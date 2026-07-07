@@ -1,7 +1,7 @@
 """Discovery API endpoints for querying and triggering service discovery."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,18 +11,24 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal, engine
 from app.discovery.dependencies.graph_builder import DependencyGraphBuilder
 from app.discovery.dependencies.traffic_analyzer import TrafficAnalyzer
+from app.discovery.dependencies.models import ServiceDependency
+from app.discovery.dependencies.registry import DependencyRegistry
+from app.discovery.dependencies.models import ServiceDependency
+from app.discovery.dependencies.registry import DependencyRegistry
 from app.discovery.dependencies.trace_analyzer import TraceAnalyzer
 from app.discovery.engine import DiscoveryEngine
 from app.discovery.models import DiscoveredService
 from app.discovery.registry import ServiceRegistry
+from app.discovery.probing import ServiceProber
 from app.models import DiscoveredServiceDB, ServiceHealthDB
 
 router = APIRouter(prefix="/services", tags=["discovery"])
 
-# Module-level engine, registry, and graph builder (created once per app lifetime)
+# Module-level engine, registry, graph builder, and prober (created once per app lifetime)
 _discovery_engine: Optional[DiscoveryEngine] = None
 _service_registry: Optional[ServiceRegistry] = None
 _graph_builder: Optional[DependencyGraphBuilder] = None
+_prober: Optional[ServiceProber] = None
 
 # Pydantic response models for health endpoints
 class HealthRecordResponse(BaseModel):
@@ -31,6 +37,7 @@ class HealthRecordResponse(BaseModel):
     status: str
     last_probed_at: Optional[datetime] = None
     response_time_ms: Optional[float] = None
+    uptime_percentage: Optional[float] = None
 
 class HealthHistoryResponse(BaseModel):
     service_id: str
@@ -105,6 +112,16 @@ def get_graph_builder() -> DependencyGraphBuilder:
     if _graph_builder is None:
         raise HTTPException(status_code=503, detail="Graph builder not initialized")
     return _graph_builder
+
+
+def set_prober(prober: ServiceProber) -> None:
+    """Called from main.py during app startup to wire the health prober."""
+    global _prober
+    _prober = prober
+
+
+def get_prober() -> Optional[ServiceProber]:
+    return _prober
 
 
 @router.get("/discovered")
@@ -205,24 +222,101 @@ async def debug_trace_analyzer(
 
 
 # ------------------------------------------------------------------
-# Health endpoints
+# Manual dependency injection
 # ------------------------------------------------------------------
+
+class DependencyDebugRequest(BaseModel):
+    source_service_id: str = Field(..., description="Source service ID")
+    target_service_id: str = Field(..., description="Target service ID")
+    dependency_type: str = Field(default="network", description="Type of dependency")
+    confidence: float = Field(default=0.8, ge=0.0, le=1.0, description="Confidence score")
+
+class DependencyInjectResponse(BaseModel):
+    success: bool = True
+    message: str = "Dependency injected"
+
+@router.post("/dependencies/inject")
+async def inject_manual_dependency(
+    request: DependencyDebugRequest,
+    db: Session = Depends(get_db),
+) -> DependencyInjectResponse:
+    """Manually inject a dependency edge between two services.
+
+    Useful for testing or when auto-discovery cannot detect a connection.
+    """
+    registry = ServiceRegistry(db_session=db)
+    
+    # Verify both services exist
+    source = registry.get_service(request.source_service_id)
+    target = registry.get_service(request.target_service_id)
+    
+    if not source:
+        raise HTTPException(status_code=404, detail=f"Source service {request.source_service_id} not found")
+    if not target:
+        raise HTTPException(status_code=404, detail=f"Target service {request.target_service_id} not found")
+    
+    dep_registry = DependencyRegistry(db_session=db)
+    dep = ServiceDependency(
+        source_service_id=request.source_service_id,
+        target_service_id=request.target_service_id,
+        dependency_type=request.dependency_type,
+        connection_count=1,
+        avg_latency_ms=None,
+        error_rate=None,
+        last_seen_at=datetime.now(timezone.utc),
+        confidence_score=request.confidence,
+        discovery_sources=["manual"],
+    )
+    
+    dep_registry.store_dependency(dep)
+    
+    return DependencyInjectResponse(
+        success=True,
+        message=f"Created dependency: {source.service_name} -> {target.service_name} ({request.dependency_type})"
+    )
+
 
 @router.get("/health")
 async def list_services_health(
     db: Session = Depends(get_db),
 ) -> List[HealthRecordResponse]:
-    """Return health records for all active services."""
+    """Return health records for all active services with latest probe data."""
     registry = ServiceRegistry(db_session=db)
     services = registry.list_services(active_only=True)
-    return [
-        HealthRecordResponse(
-            service_id=s.service_id,
-            service_name=s.service_name,
-            status=s.health_status or "unknown",
+
+    # Get latest health record for each service
+    results = []
+    for s in services:
+        health_rec = (
+            db.query(ServiceHealthDB)
+            .filter_by(service_id=s.service_id)
+            .order_by(ServiceHealthDB.last_probed_at.desc())
+            .first()
         )
-        for s in services
-    ]
+
+        response_time_ms = None
+        uptime_percentage = None
+        last_probed_at = None
+
+        if health_rec:
+            last_probed_at = health_rec.last_probed_at
+            uptime_percentage = getattr(health_rec, "uptime_percentage", None)
+            probe_results = health_rec.probe_results or []
+            if probe_results and isinstance(probe_results, list):
+                latest = probe_results[-1]
+                response_time_ms = latest.get("response_time_ms")
+
+        results.append(
+            HealthRecordResponse(
+                service_id=s.service_id,
+                service_name=s.service_name,
+                status=s.health_status or "unknown",
+                last_probed_at=last_probed_at,
+                response_time_ms=response_time_ms,
+                uptime_percentage=uptime_percentage,
+            )
+        )
+    return results
 
 
 @router.get("/{service_id}/health")

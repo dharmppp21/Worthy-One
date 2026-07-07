@@ -11,7 +11,8 @@ from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from .models import DiscoveredService
-from app.models import DiscoveredServiceDB
+from app.models import DiscoveredServiceDB, ServiceHealthDB
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -231,6 +232,75 @@ class ServiceRegistry:
         self._db.refresh(db_obj)
 
         self._cache[service_id] = self._to_model(db_obj)
+
+    def store_health_probe(
+        self,
+        service_id: str,
+        status: str,
+        response_time_ms: Optional[float] = None,
+        response_status_code: Optional[int] = None,
+        error_message: Optional[str] = None,
+    ) -> None:
+        """Store a health probe result in ServiceHealthDB.
+
+        Args:
+            service_id: The service UUID.
+            status: Probe status string ("up", "down", "unknown").
+            response_time_ms: Response time in milliseconds.
+            response_status_code: HTTP status code if applicable.
+            error_message: Error message if probe failed.
+        """
+        now = datetime.now(timezone.utc)
+
+        # Get or create the health record
+        health_rec = (
+            self._db.query(ServiceHealthDB)
+            .filter_by(service_id=service_id)
+            .order_by(ServiceHealthDB.last_probed_at.desc())
+            .first()
+        )
+
+        if health_rec is None:
+            health_rec = ServiceHealthDB(
+                id=str(uuid.uuid4()),
+                service_id=service_id,
+                status=status,
+                probe_results=[],
+                last_probed_at=now,
+                last_up_at=now if status == "up" else None,
+                last_down_at=now if status == "down" else None,
+                uptime_percentage=100.0 if status == "up" else 0.0,
+            )
+            self._db.add(health_rec)
+        else:
+            health_rec.status = status
+            health_rec.last_probed_at = now
+            if status == "up":
+                health_rec.last_up_at = now
+            elif status == "down":
+                health_rec.last_down_at = now
+
+        # Append probe result to list
+        probe_result = {
+            "response_time_ms": response_time_ms,
+            "response_status_code": response_status_code,
+            "error_message": error_message,
+            "probed_at": now.isoformat(),
+        }
+
+        if health_rec.probe_results is None:
+            health_rec.probe_results = []
+        health_rec.probe_results.append(probe_result)
+        # Keep only last 100 probe results
+        health_rec.probe_results = health_rec.probe_results[-100:]
+
+        # Calculate uptime percentage
+        total_probes = len(health_rec.probe_results)
+        up_probes = sum(1 for p in health_rec.probe_results if not p.get("error_message"))
+        health_rec.uptime_percentage = (up_probes / total_probes * 100.0) if total_probes > 0 else 100.0
+
+        self._db.commit()
+        self._db.refresh(health_rec)
 
     def remove_stale_services(
         self, timeout_seconds: int = 120
