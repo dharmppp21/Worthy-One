@@ -2,6 +2,11 @@ import os
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("REDIS_URL", "redis://localhost:12345/0")  # Dummy URL for tests — Redis gracefully degrades
+# Disable app-level auto-discovery during tests. Otherwise create_app() starts a
+# background loop that scans the real host machine (processes, Docker) and writes
+# those services into the shared in-memory test DB, polluting discovery integration
+# tests. Tests that exercise discovery wire up their own engine/registry explicitly.
+os.environ.setdefault("SIGNALFORGE_DISCOVERY_ENABLED", "false")
 
 import pytest
 from fastapi.testclient import TestClient
