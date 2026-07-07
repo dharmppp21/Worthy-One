@@ -13,7 +13,6 @@ import ReactFlow, {
   Position,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import dagre from "@dagrejs/dagre";
 import type { DiscoveredService, AutoDependencyEdge, ServiceHealth } from "../types";
 
 /* ─── Icon mapping by service type ─── */
@@ -67,7 +66,7 @@ function ServiceNode({ data }: { data: any }) {
       <div style={{ fontSize: 20, marginBottom: 4 }}>{icon}</div>
       <div style={{ fontWeight: 600, color: "#1f2937" }}>{svc.service_name}</div>
       <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
-        {svc.service_type} · {health ? `${health.uptime_percentage.toFixed(0)}%` : "?"}
+        {svc.service_type} · {health?.uptime_percentage !== undefined ? `${health.uptime_percentage.toFixed(0)}%` : "?"}
       </div>
       <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
     </div>
@@ -76,20 +75,24 @@ function ServiceNode({ data }: { data: any }) {
 
 const nodeTypes = { service: ServiceNode };
 
-/* ─── Dagre layout helper ─── */
+/* ─── Simple grid layout (no dagre dependency) ─── */
 function getLayoutedElements(nodes: Node[], edges: Edge[], direction: "TB" | "LR" = "TB") {
-  const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: direction, nodesep: 80, ranksep: 100 });
-  g.setDefaultEdgeLabel(() => ({}));
+  if (nodes.length === 0) return { nodes, edges };
 
-  nodes.forEach((n) => g.setNode(n.id, { width: 140, height: 70 }));
-  edges.forEach((e) => g.setEdge(e.source, e.target));
+  const COLS = direction === "TB" ? Math.ceil(Math.sqrt(nodes.length * 1.5)) : Math.ceil(nodes.length / Math.ceil(Math.sqrt(nodes.length / 1.5)));
+  const GAP_X = 180;
+  const GAP_Y = 140;
 
-  dagre.layout(g);
-
-  const laidOutNodes = nodes.map((n) => {
-    const node = g.node(n.id);
-    return { ...n, position: { x: node.x - 70, y: node.y - 35 } };
+  const laidOutNodes = nodes.map((n, i) => {
+    const col = i % COLS;
+    const row = Math.floor(i / COLS);
+    return {
+      ...n,
+      position: {
+        x: col * GAP_X + 50,
+        y: row * GAP_Y + 50,
+      },
+    };
   });
 
   return { nodes: laidOutNodes, edges };
@@ -222,6 +225,22 @@ export default function ServiceTopologyMap({
 
   const allTypes = Array.from(new Set(services.map((s) => s.service_type)));
   const allHealth = ["up", "down", "unknown"];
+
+  /* Empty state */
+  if (services.length === 0) {
+    return (
+      <div className="graph-empty" style={{ height: "60vh" }}>
+        <div className="empty-icon">🗺️</div>
+        <h3>No services discovered yet</h3>
+        <p className="empty-hint">
+          Discovery runs every 30 seconds. Make sure the backend is running with discovery enabled.
+        </p>
+        <button className="retry-btn" onClick={onRetry} style={{ marginTop: 12 }}>
+          Refresh Now
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", height: "70vh" }}>

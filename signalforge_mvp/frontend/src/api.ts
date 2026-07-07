@@ -1,6 +1,8 @@
 import type { AITriageResponse, Incident, IncidentTimelineEntry, RootCauseResponse, Runbook, ServiceGraphResponse, SearchResponse } from "./types";
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+// In the production build the app is served by nginx, which proxies `/api` to
+// the backend (same-origin, no CORS). In Vite dev we call the backend directly.
+export const API_BASE_URL = import.meta.env.PROD ? "/api" : "http://127.0.0.1:8000";
 const API_KEY = "sf-api-key-demo";  // Matches backend auth.py
 
 class ApiError extends Error {
@@ -91,7 +93,7 @@ export async function updateIncidentStatus(
 }
 
 export async function fetchServiceGraph(): Promise<ServiceGraphResponse> {
-  return apiFetch<ServiceGraphResponse>("/graph");
+  return apiFetch<ServiceGraphResponse>("/graph/auto");
 }
 
 export async function fetchRunbooks(serviceName?: string): Promise<Runbook[]> {
