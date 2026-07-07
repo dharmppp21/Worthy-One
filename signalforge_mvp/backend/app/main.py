@@ -22,18 +22,23 @@ from app.routers import (
 )
 from app.routers import discovery as discovery_router
 from app.routers import discovery_ws
-from app.database import DATABASE_URL, SessionLocal
+from app.database import SessionLocal
 from app.services.kafka_consumer_worker import start_consumer_worker
 
 from app.discovery.dependencies.graph_builder import DependencyGraphBuilder
 from app.discovery.dependencies.mesh_analyzer import ServiceMeshAnalyzer
 from app.discovery.dependencies.network_scanner import NetworkConnectionScanner
 from app.discovery.dependencies.registry import DependencyRegistry
+from app.discovery.dependencies.static_analyzer import StaticHeuristicAnalyzer
 from app.discovery.dependencies.trace_analyzer import TraceAnalyzer
+from app.discovery.dependencies.traffic_analyzer import TrafficAnalyzer
 from app.discovery.environment import AutoConfigurator
 from app.discovery.engine import DiscoveryEngine
+from app.discovery.probing import ServiceProber
 from app.discovery.registry import ServiceRegistry
-from app.routers.discovery import set_discovery_engine, set_graph_builder, get_discovery_engine, get_graph_builder
+from app.routers.discovery import (
+    set_discovery_engine, set_graph_builder, set_prober,
+)
 
 from app.discovery.correlation import EventServiceCorrelator
 from app.services.event_processor import event_processor
@@ -45,6 +50,10 @@ from alembic import command
 configure_logging()
 
 
+# Module-level state for startup/shutdown coordination
+_startup_state: dict = {}
+
+
 def run_migrations() -> None:
     """Run Alembic migrations to ensure the database schema is current."""
     import os
@@ -52,21 +61,50 @@ def run_migrations() -> None:
     backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     alembic_ini = os.path.join(backend_dir, "alembic.ini")
     alembic_cfg = Config(alembic_ini)
-    alembic_cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
+    # Keep Alembic's configured URL consistent with the app's database. env.py
+    # ultimately sources the URL from app.config, but setting it here avoids a
+    # misleading hardcoded value in the ini config.
+    alembic_cfg.set_main_option("sqlalchemy.url", config.DATABASE_URL)
     command.upgrade(alembic_cfg, "head")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan context manager for startup/shutdown cleanup."""
+    """Lifespan context manager for startup/shutdown cleanup.
+
+    Startup: background tasks need an event loop, so we start them here.
+    Shutdown: cancel background tasks gracefully.
+    """
+    # --- Startup: start background tasks now that event loop is running ---
+    # These are None when discovery is disabled (SIGNALFORGE_DISCOVERY_ENABLED=false).
+    # We read them from _startup_state rather than the router getters, which raise
+    # HTTPException(503) when unset (they are meant for use as HTTP dependencies).
+    engine = _startup_state.get("engine")
+    if engine is not None:
+        providers = _startup_state.get("providers", [])
+        if providers:
+            engine.start_background_discovery(
+                interval_seconds=_startup_state.get("discovery_interval", 30)
+            )
+
+    graph_builder = _startup_state.get("graph_builder")
+    if graph_builder is not None:
+        graph_builder.start_background_build(interval_seconds=60)
+
+    prober = _startup_state.get("prober")
+    if prober is not None:
+        prober.start_background_probing(interval_seconds=15)
+
     yield
-    # Shutdown: cancel background tasks gracefully
-    engine = get_discovery_engine()
+
+    # --- Shutdown: cancel background tasks gracefully ---
     if engine is not None:
         engine.stop_background_discovery()
-    graph_builder = get_graph_builder()
     if graph_builder is not None:
         graph_builder.stop_background_build()
+    if prober is not None:
+        prober.stop_background_probing()
+        await prober.close()
 
 
 def create_app() -> FastAPI:
@@ -118,7 +156,7 @@ def create_app() -> FastAPI:
     start_consumer_worker()
 
     # ------------------------------------------------------------------
-    # Service Discovery Setup
+    # Service Discovery Setup (synchronous — no background tasks here)
     # ------------------------------------------------------------------
     configurator = AutoConfigurator()
     if configurator.enabled:
@@ -131,9 +169,12 @@ def create_app() -> FastAPI:
             for provider in providers:
                 engine.register_provider(provider)
             set_discovery_engine(engine)
-            if providers:
-                engine.start_background_discovery(interval_seconds=configurator.interval)
-            else:
+
+            # Store for lifespan startup (read back there to start background tasks)
+            _startup_state["engine"] = engine
+            _startup_state["providers"] = providers
+            _startup_state["discovery_interval"] = configurator.interval
+            if not providers:
                 from app.logging_config import get_logger
                 logger_local = get_logger("app.main")
                 logger_local.info("No discovery providers configured; discovery engine idle.")
@@ -144,6 +185,8 @@ def create_app() -> FastAPI:
             dep_registry = DependencyRegistry(db_session=db_session)
             analyzers = [
                 NetworkConnectionScanner(registry=registry),
+                StaticHeuristicAnalyzer(registry=registry),
+                TrafficAnalyzer(registry=registry),
                 TraceAnalyzer(registry=registry),
                 ServiceMeshAnalyzer(registry=registry),
             ]
@@ -154,13 +197,20 @@ def create_app() -> FastAPI:
             )
             graph_builder.set_publisher(discovery_ws.publisher)
             set_graph_builder(graph_builder)
-            graph_builder.start_background_build(interval_seconds=60)
+            _startup_state["graph_builder"] = graph_builder
 
             # ------------------------------------------------------------------
             # Event Correlator Setup
             # ------------------------------------------------------------------
             correlator = EventServiceCorrelator(registry=registry)
             event_processor.set_correlator(correlator)
+
+            # ------------------------------------------------------------------
+            # Health Prober Setup
+            # ------------------------------------------------------------------
+            prober = ServiceProber(registry=registry, publisher=discovery_ws.publisher)
+            set_prober(prober)
+            _startup_state["prober"] = prober
 
         except Exception as exc:
             from app.logging_config import get_logger

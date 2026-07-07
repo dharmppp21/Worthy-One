@@ -242,7 +242,12 @@ class TestMixedDeduplication:
             MagicMock(status="LISTEN", laddr=MagicMock(ip="127.0.0.1", port=5432))
         ])
 
-        with patch("app.discovery.providers.process.psutil") as mock_psutil, \
+        # The Docker provider registered above is still on the engine. Mock it
+        # with an empty client so the second run_discovery() neither hits the
+        # real Docker daemon nor re-writes (and clobbers) the postgres service —
+        # only the process provider should update it here.
+        with patch("docker.from_env", return_value=build_mock_docker_client([])), \
+             patch("app.discovery.providers.process.psutil") as mock_psutil, \
              patch("app.discovery.providers.process._get_service_name_from_exe", return_value="test-postgres-1"):
             mock_psutil.process_iter = MagicMock(return_value=[process])
             mock_psutil.CONN_LISTEN = "LISTEN"

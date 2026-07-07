@@ -65,9 +65,13 @@ class TestEnvironmentDetector:
             pass
 
     def test_is_docker_no_cgroup(self, monkeypatch, tmp_path):
-        """No /proc/1/cgroup file means not Docker."""
+        """No /proc/1/cgroup file and no docker process means not Docker."""
         monkeypatch.chdir(tmp_path)
-        assert EnvironmentDetector.is_docker() is False
+        # On Windows, is_docker() also scans running processes for a docker
+        # daemon; mock it so the test does not depend on whether Docker Desktop
+        # happens to be running on the host.
+        with patch("psutil.process_iter", return_value=iter([])):
+            assert EnvironmentDetector.is_docker() is False
 
     def test_get_cloud_provider_aws(self, monkeypatch):
         monkeypatch.setenv("AWS_EXECUTION_ENV", "AWS_ECS_FARGATE")
