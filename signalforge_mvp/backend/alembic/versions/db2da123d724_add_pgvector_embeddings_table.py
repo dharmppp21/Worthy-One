@@ -27,18 +27,18 @@ def upgrade() -> None:
     # Enable pgvector extension
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
-    # Create embeddings table for semantic search
+    # Create embeddings table for semantic search. The pgvector `vector` type is
+    # not a core SQLAlchemy type, so the embedding column is added via raw SQL
+    # after the table is created.
     op.create_table(
         "embeddings",
         sa.Column("id", sa.String(128), primary_key=True),
         sa.Column("entity_type", sa.String(32), nullable=False),
         sa.Column("entity_id", sa.String(128), nullable=False),
-        sa.Column("embedding", sa.NullType(), nullable=True),  # Vector type set via raw SQL below
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Index("idx_embeddings_entity", "entity_type", "entity_id"),
     )
-    # Set the embedding column to Vector(1536) using raw SQL
-    op.execute("ALTER TABLE embeddings ALTER COLUMN embedding TYPE vector(1536)")
+    op.execute("ALTER TABLE embeddings ADD COLUMN embedding vector(1536)")
     # Add unique constraint for UPSERT
     op.create_unique_constraint("uq_embeddings_entity", "embeddings", ["entity_type", "entity_id"])
 
