@@ -177,7 +177,7 @@ export async function fetchDiscoveredServices(): Promise<DiscoveredService[]> {
 }
 
 export async function fetchAutoGraph(): Promise<AutoDependencyGraph> {
-  return apiFetch<AutoDependencyGraph>("/graph/auto");
+  return apiFetch<AutoDependencyGraph>("/graph/dependencies");
 }
 
 export async function fetchServicesHealth(): Promise<ServiceHealth[]> {
