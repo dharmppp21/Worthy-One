@@ -2,17 +2,15 @@
 
 **Production-ready incident management platform for microservices**
 
-Built in 49 days. FastAPI + React + PostgreSQL + Redis + Kafka. 341 tests. Load-tested at 47.7 RPS.
+FastAPI + React + PostgreSQL + Redis + Kafka. 341 tests. Load-tested at 47.7 RPS.
 
 ---
 
 SignalForge ingests telemetry events (metrics, logs, traces, deployments), detects anomalies using rolling-window analysis, creates incidents with structured evidence, **auto-discovers services across environments** (Docker, Kubernetes, cloud), probes their health, correlates events to them automatically, and provides a React dashboard for triage, root-cause analysis, and operational memory.
 
 > **Demo ready:** See [`DEMO.md`](DEMO.md) for a 5-minute walkthrough with seed data and talking points.
-> **Interview prep:** See [`INTERVIEW_GUIDE.md`](INTERVIEW_GUIDE.md) for explanation from 30-second pitch to FAANG-level deep dive. See [`INTERVIEW_AUTO_DISCOVERY.md`](INTERVIEW_AUTO_DISCOVERY.md) for the auto-discovery deep dive.
 > **Quick reference:** See [`ARCHITECTURE_SUMMARY.md`](ARCHITECTURE_SUMMARY.md) for one-page architecture overview.
 > **Environment guide:** See [`docs/ENVIRONMENTS.md`](docs/ENVIRONMENTS.md) for Docker, K8s, AWS, and bare-metal discovery setup.
-> **Resume bullets:** See [`RESUME_BULLETS.md`](RESUME_BULLETS.md) for copy-paste ready bullet points.
 
 **What makes it different:** Every architectural decision has a clear justification. No magic — just production patterns applied to a focused domain.
 
@@ -412,9 +410,6 @@ signalforge_mvp/
 ├── docs/
 │   └── ENVIRONMENTS.md                 # Environment-specific discovery guide (Docker, K8s, AWS, bare metal)
 ├── AWS_ARCHITECTURE.md                 # Complete AWS deployment spec (ECS, RDS, ElastiCache, MSK, ALB, CloudFront, Terraform, CI/CD)
-├── RESUME_BULLETS.md                   # Copy-paste ready resume bullet points
-├── INTERVIEW_AUTO_DISCOVERY.md         # Interview deep dive on auto-discovery
-├── PROJECT_STATE.md                    # Architecture decisions, file inventory, test counts, known bugs, next steps
 └── README.md                           # This file
 ```
 
@@ -480,7 +475,7 @@ Results saved to `tests/load/load_test_results.json`.
 ## Performance Benchmarks
 
 ```powershell
-cd signalforge_mvpackend
+cd signalforge_mvpackend
 .venv\Scripts\python.exe -m pytest tests\performance -v
 ```
 
