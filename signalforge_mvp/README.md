@@ -132,9 +132,9 @@ docker-compose --profile simulator up simulator
 | Redis | 6379 | Hot state: rolling windows, pub/sub |
 | Redpanda (Kafka) | 9092 | Async event streaming |
 | Backend API | 8000 | FastAPI + all endpoints |
-| Frontend | 80 | React dashboard via nginx |
+| Frontend | 8080 | React dashboard via nginx |
 
-**Open the dashboard:** `http://localhost`
+**Open the dashboard:** `http://localhost:8080`
 
 **API docs:** `http://localhost:8000/docs`
 
@@ -156,7 +156,7 @@ The backend container automatically discovers other services in the same Docker 
 **Verify discovery is working:**
 ```powershell
 # Check discovered services via the API
-docker exec signforge-backend curl -s http://localhost:8000/services/discovered
+docker exec signalforge-backend curl -s http://localhost:8000/services/discovered
 
 # Or from your host
 curl http://localhost:8000/services/discovered
@@ -192,7 +192,7 @@ docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 1. **Start the stack:** `docker-compose up -d` — all 5 services start, migrations run automatically, Kafka consumer worker starts in background
 2. **Check health:** `curl http://localhost:8000/health` → `{"status":"ok","dependencies":{"database":"available","redis":"available","kafka":"available"}}`
 3. **Generate traffic:** `docker-compose --profile simulator up simulator` — 100 events from 5 services, mix of healthy (200ms, 200 OK) and failing (500, 1500ms+ latency)
-4. **Open dashboard:** `http://localhost` — you'll see a "Live Service Incidents" feed. Within 5-10 seconds, an incident appears for `checkout-service` (red, critical severity)
+4. **Open dashboard:** `http://localhost:8080` — you'll see a "Live Service Incidents" feed. Within 5-10 seconds, an incident appears for `checkout-service` (red, critical severity)
 5. **Click the incident:** Opens detail panel with timeline, evidence, and root-cause panel. Root cause shows deployment correlation (if a deployment happened within 30 min), anomaly stats, and service graph
 6. **Check runbooks:** Click "Runbooks" tab — create a runbook for `checkout-service`: "Check payment-service health, verify inventory-service connectivity, escalate if p95 > 2000ms"
 7. **Search:** Click "Search" tab, type "checkout" — returns both the incident and the runbook
