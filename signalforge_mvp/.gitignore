@@ -11,3 +11,13 @@ dist/
 .env
 .env.*
 !.env.example
+
+# Local-only working notes and portfolio prep (kept on disk, out of the repo).
+# These read as an AI-generated portfolio to a reviewer browsing the repo.
+discovered.md
+RESUME_BULLETS.md
+INTERVIEW_GUIDE.md
+INTERVIEW_AUTO_DISCOVERY.md
+EXPLAIN_TO_FRIEND.txt
+AUTO_DISCOVERY_PROMPTS.md
+PROJECT_STATE.md

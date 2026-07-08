@@ -51,3 +51,11 @@ Thumbs.db
 
 # Node
 node_modules/
+
+# Local-only working notes / AI-generation artifacts (kept out of the repo)
+firstreadme.md
+Days/
+Prompt.txt
+FAANG_Project_Idea_AI_Incident_Triage.txt
+SignalForge_Daily_Prompt_Timeline_Jun20_to_Jul20.txt
+SignalForge_Step_By_Step_Build_Guide.txt
