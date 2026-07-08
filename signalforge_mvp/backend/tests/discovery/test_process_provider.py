@@ -145,6 +145,32 @@ async def test_discover_multiple_ports(provider):
 
 
 @pytest.mark.asyncio
+async def test_discover_multiple_ips_deterministic_host(provider):
+    """A process bound to several IPs yields one service with a stable host.
+
+    psutil does not order connections deterministically, so the provider must
+    normalize the ordering; otherwise the registry accumulates duplicate entries
+    for the same process across discovery runs.
+    """
+    # Connections supplied out of sorted order on purpose.
+    conn1 = _make_mock_connection("::1", 8000)
+    conn2 = _make_mock_connection("127.0.0.1", 8000)
+    proc = _make_mock_process("python", "/usr/bin/python3", 4242, [conn1, conn2])
+
+    with patch("app.discovery.providers.process.psutil") as mock_psutil:
+        mock_psutil.process_iter = MagicMock(return_value=[proc])
+        mock_psutil.CONN_LISTEN = "LISTEN"
+        result = await provider.discover()
+
+    assert len(result) == 1
+    svc = result[0]
+    # "127.0.0.1" sorts before "::1", so it is the canonical host regardless of
+    # the order psutil happened to return the connections in.
+    assert svc.host == "127.0.0.1"
+    assert svc.endpoints == ["tcp://127.0.0.1:8000", "tcp://::1:8000"]
+
+
+@pytest.mark.asyncio
 async def test_discover_skips_non_listening(provider):
     conn = _make_mock_connection("127.0.0.1", 5432, status="ESTABLISHED")
     proc = _make_mock_process("postgres", "/usr/bin/postgres", 9999, [conn])

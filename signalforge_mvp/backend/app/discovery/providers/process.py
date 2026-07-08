@@ -221,6 +221,12 @@ class ProcessDiscoveryProvider(ServiceDiscoveryProvider):
                 if not listening_addrs:
                     continue
 
+                # Sort for a deterministic host/endpoint ordering. psutil does not
+                # return connections in a stable order, so without this the same
+                # process (bound to e.g. 127.0.0.1 and ::) picks a different host
+                # on each run and the registry accumulates duplicate entries.
+                listening_addrs.sort()
+
                 # Determine service type from all listening ports (best match)
                 ports = [port for _, port in listening_addrs]
                 service_type = _get_service_type_from_ports(ports)
