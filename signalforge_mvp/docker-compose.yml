@@ -9,9 +9,13 @@ services:
     environment:
       - DATABASE_URL=postgresql://signalforge:signalforge@postgres:5432/signalforge
       - REDIS_URL=redis://redis:6379/0
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - LOG_LEVEL=info
       - SERVICE_PORT=8000
+      # Auto-discovery: scan the Docker daemon for running containers. The
+      # process provider is left out here because inside the container it would
+      # only see the container's own PID namespace.
+      - SIGNALFORGE_DISCOVERY_ENABLED=true
+      - SIGNALFORGE_DISCOVERY_PROVIDERS=docker,config
     ports:
       - "8000:8000"
     depends_on:
@@ -21,6 +25,9 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
+      # Read-only Docker socket so the DockerDiscoveryProvider can list the
+      # running containers (postgres, redis, frontend, itself).
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
 
   frontend:
