@@ -41,7 +41,7 @@ SignalForge ingests telemetry events (metrics, logs, traces, deployments), detec
 │  Auth: X-API-Key header → tenant isolation enforced on every query      │
 │  Rate limit: 100 RPS per IP (sliding window)                             │
 │  GET /services/discovered → auto-discovered services with health        │
-│  GET /services/dependencies → auto-detected dependency graph              │
+│  GET /graph/auto → auto-detected dependency graph                        │
 │  WS /ws/discovery → real-time discovery events                          │
 └─────────────────────────────────────┬───────────────────────────────────┘
                                       │
