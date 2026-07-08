@@ -85,3 +85,62 @@ class TestServiceGraph:
 
         edge_pairs = {(e["source"], e["target"]) for e in data["edges"]}
         assert edge_pairs == set(traces)
+
+
+class TestAutoDependencyGraph:
+    """The /graph/dependencies endpoint returns full edge detail and drops orphans."""
+
+    def test_returns_rich_edges_and_filters_orphans(self, client, reset_store):
+        from app.main import app as fastapi_app
+        from app.routers.discovery import get_graph_builder
+        from app.discovery.dependencies.models import DependencyGraph, ServiceDependency
+        from app.discovery.models import DiscoveredService
+
+        svc_a = DiscoveredService(
+            service_name="api", host="127.0.0.1", endpoints=["tcp://127.0.0.1:8000"]
+        )
+        svc_b = DiscoveredService(
+            service_name="postgres", host="127.0.0.1", endpoints=["tcp://127.0.0.1:5432"]
+        )
+        real_edge = ServiceDependency(
+            source_service_id=svc_a.service_id,
+            target_service_id=svc_b.service_id,
+            dependency_type="database",
+            connection_count=7,
+            avg_latency_ms=12.5,
+            confidence_score=0.9,
+            discovery_sources=["network"],
+        )
+        # Target is not one of the graph nodes — must be filtered out.
+        orphan_edge = ServiceDependency(
+            source_service_id=svc_a.service_id,
+            target_service_id="inferred-10-0-0-1-5000",
+            dependency_type="unknown",
+            confidence_score=0.3,
+            discovery_sources=["network"],
+        )
+        graph = DependencyGraph(nodes=[svc_a, svc_b], edges=[real_edge, orphan_edge])
+
+        class _FakeBuilder:
+            def get_graph(self, **kwargs):
+                return graph
+
+        fastapi_app.dependency_overrides[get_graph_builder] = lambda: _FakeBuilder()
+        try:
+            resp = client.get("/graph/dependencies")
+        finally:
+            fastapi_app.dependency_overrides.pop(get_graph_builder, None)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["nodes"]) == 2
+        assert len(data["edges"]) == 1  # orphan filtered
+
+        edge = data["edges"][0]
+        assert edge["source"] == svc_a.service_id
+        assert edge["target"] == svc_b.service_id
+        assert edge["dependency_type"] == "database"
+        assert edge["confidence"] == 0.9
+        assert edge["connection_count"] == 7
+        assert edge["avg_latency_ms"] == 12.5
+        assert edge["sources"] == ["network"]
