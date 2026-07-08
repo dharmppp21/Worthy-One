@@ -132,8 +132,8 @@ export type AutoDependencyEdge = {
   dependency_type: string;
   confidence: number;
   connection_count: number;
-  avg_latency_ms: number;
-  error_rate: number;
+  avg_latency_ms: number | null;
+  error_rate: number | null;
   sources: string[];
   first_detected_at: string;
   last_updated_at: string;

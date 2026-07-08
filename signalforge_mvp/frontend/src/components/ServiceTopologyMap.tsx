@@ -181,7 +181,7 @@ export default function ServiceTopologyMap({
         id: `${e.source}->${e.target}`,
         source: e.source,
         target: e.target,
-        label: `${e.connection_count} reqs, ${e.avg_latency_ms.toFixed(0)}ms`,
+        label: `${e.connection_count} reqs${e.avg_latency_ms != null ? `, ${e.avg_latency_ms.toFixed(0)}ms` : ""}`,
         style: { stroke: strokeColor, strokeWidth: width, strokeDasharray: strokeStyle === "dashed" ? "5,5" : strokeStyle === "dotted" ? "2,2" : undefined },
         animated,
         labelStyle: { fontSize: 10, fill: "#4b5563" },
