@@ -369,8 +369,7 @@ signalforge_mvp/
 │   │   │   └── test_discovery_mixed.py      # Mixed environment tests
 │   │   ├── load/                     # Load tests
 │   │   │   ├── locustfile.py
-│   │   │   ├── run_load_tests.py
-│   │   │   └── debug_detection.py
+│   │   │   └── run_load_tests.py
 │   │   └── performance/              # Performance benchmarks
 │   │       ├── test_discovery_scale.py     # Discovery latency, memory, graph queries
 │   │       ├── test_event_correlation_scale.py # Correlation latency, accuracy
@@ -406,7 +405,6 @@ signalforge_mvp/
 ├── docker-compose.yml                  # Full stack: PostgreSQL + Redis + Redpanda + Backend + Frontend + Simulator
 ├── docker-compose.override.yml         # Local dev: live reload, hot restart, Vite HMR
 ├── docker-compose.prod.yml             # Production: resource limits, read-only, security hardening
-├── Dockerfile.discovery                # Standalone discovery agent (placeholder)
 ├── docs/
 │   └── ENVIRONMENTS.md                 # Environment-specific discovery guide (Docker, K8s, AWS, bare metal)
 ├── AWS_ARCHITECTURE.md                 # Complete AWS deployment spec (ECS, RDS, ElastiCache, MSK, ALB, CloudFront, Terraform, CI/CD)
