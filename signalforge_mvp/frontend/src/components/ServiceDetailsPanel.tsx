@@ -168,11 +168,22 @@ export default function ServiceDetailsPanel({
                   {neighbors.map((e: AutoDependencyEdge) => {
                     const isOutgoing = e.source === service.service_id;
                     const other = isOutgoing ? e.target : e.source;
+                    // Only show metrics we actually measured — statically or
+                    // config-inferred edges (e.g. a database dependency) carry
+                    // no latency, so omit that segment rather than print "?ms".
+                    const meta = [
+                      e.dependency_type,
+                      `confidence ${e.confidence?.toFixed(2) ?? "?"}`,
+                      `${e.connection_count ?? "?"} reqs`,
+                    ];
+                    if (e.avg_latency_ms != null) {
+                      meta.push(`${e.avg_latency_ms.toFixed(0)}ms`);
+                    }
                     return (
                       <li key={`${e.source}->${e.target}`} style={{ padding: "8px 0", borderBottom: "1px solid #f3f4f6" }}>
                         <strong>{isOutgoing ? "→" : "←"} {other}</strong>
                         <span style={{ fontSize: 12, color: "#6b7280", marginLeft: 8 }}>
-                          {e.dependency_type} · confidence {e.confidence?.toFixed(2) ?? "?"} · {e.connection_count ?? "?"} reqs · {e.avg_latency_ms?.toFixed(0) ?? "?"}ms
+                          {meta.join(" · ")}
                         </span>
                       </li>
                     );
