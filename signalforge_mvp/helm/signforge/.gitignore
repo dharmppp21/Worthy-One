@@ -1,0 +1,4 @@
+# Subchart archives fetched by `helm dependency build` from the committed
+# Chart.lock. These are vendored artifacts — CI rebuilds them from Chart.lock,
+# so they should not be committed. Chart.lock itself IS committed.
+charts/*.tgz
