@@ -8,8 +8,6 @@ FastAPI + React + PostgreSQL + Redis + Kafka. 341 tests. Load-tested at 47.7 RPS
 
 SignalForge ingests telemetry events (metrics, logs, traces, deployments), detects anomalies using rolling-window analysis, creates incidents with structured evidence, **auto-discovers services across environments** (Docker, Kubernetes, cloud), probes their health, correlates events to them automatically, and provides a React dashboard for triage, root-cause analysis, and operational memory.
 
-> **Demo ready:** See [`DEMO.md`](DEMO.md) for a 5-minute walkthrough with seed data and talking points.
-> **Quick reference:** See [`ARCHITECTURE_SUMMARY.md`](ARCHITECTURE_SUMMARY.md) for one-page architecture overview.
 > **Environment guide:** See [`docs/ENVIRONMENTS.md`](docs/ENVIRONMENTS.md) for Docker, K8s, AWS, and bare-metal discovery setup.
 
 **What makes it different:** Every architectural decision has a clear justification. No magic — just production patterns applied to a focused domain.
