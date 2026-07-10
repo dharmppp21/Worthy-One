@@ -33,7 +33,7 @@ module "signforge" {
   enable_msk         = false
 
   # Networking
-  enable_alb       = true
+  enable_alb        = true
   enable_cloudfront = false
 
   # EKS sizing

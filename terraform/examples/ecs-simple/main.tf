@@ -33,7 +33,7 @@ module "signforge" {
   enable_msk         = false
 
   # ALB only
-  enable_alb       = true
+  enable_alb        = true
   enable_cloudfront = false
 
   # ECS sizing (small for dev)

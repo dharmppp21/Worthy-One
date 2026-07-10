@@ -28,23 +28,23 @@ resource "aws_secretsmanager_secret_version" "db_password" {
 }
 
 resource "aws_db_instance" "main" {
-  identifier              = var.cluster_name
-  engine                  = "postgres"
-  engine_version          = "15"
-  instance_class          = var.db_instance_class
-  allocated_storage       = var.db_allocated_storage
-  max_allocated_storage   = var.db_allocated_storage * 2
-  db_name                 = "signforge"
-  username                = "signforge"
-  password                = random_password.db_master.result
-  db_subnet_group_name    = aws_db_subnet_group.main.name
-  vpc_security_group_ids  = [var.security_group_id]
-  multi_az                = var.db_multi_az
-  storage_encrypted       = true
-  backup_retention_period = 7
-  skip_final_snapshot     = false
+  identifier                = var.cluster_name
+  engine                    = "postgres"
+  engine_version            = "15"
+  instance_class            = var.db_instance_class
+  allocated_storage         = var.db_allocated_storage
+  max_allocated_storage     = var.db_allocated_storage * 2
+  db_name                   = "signforge"
+  username                  = "signforge"
+  password                  = random_password.db_master.result
+  db_subnet_group_name      = aws_db_subnet_group.main.name
+  vpc_security_group_ids    = [var.security_group_id]
+  multi_az                  = var.db_multi_az
+  storage_encrypted         = true
+  backup_retention_period   = 7
+  skip_final_snapshot       = false
   final_snapshot_identifier = "${var.cluster_name}-final"
-  deletion_protection     = false
+  deletion_protection       = false
 
   tags = merge(
     { Name = "${var.cluster_name}-db" },
