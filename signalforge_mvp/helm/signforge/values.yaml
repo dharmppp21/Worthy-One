@@ -126,5 +126,9 @@ secrets:
 initContainers:
   migrations:
     enabled: true
-    image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+    # Leave empty to default to the app image (image.repository:image.tag),
+    # which the Deployment resolves via `printf`. Values files are NOT
+    # re-templated by Helm, so a literal "{{ ... }}" here would be used
+    # verbatim and fail to pull.
+    image: ""
     command: ["alembic", "upgrade", "head"]
