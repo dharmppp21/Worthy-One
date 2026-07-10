@@ -1,0 +1,46 @@
+name: IaC Security Scan
+
+# Static security analysis of the infrastructure-as-code (Terraform + Helm)
+# with Checkov. Runs on any change to the Terraform or Helm sources.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "terraform/**"
+      - "signalforge_mvp/helm/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "terraform/**"
+      - "signalforge_mvp/helm/**"
+
+permissions:
+  contents: read
+
+jobs:
+  checkov:
+    name: Checkov (Terraform + Helm)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Scan Terraform
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: terraform
+          framework: terraform
+          quiet: true
+          # Report findings without failing the build. Flip to false once the
+          # module baseline is triaged, to enforce a clean scan on every PR.
+          soft_fail: true
+          output_format: cli
+
+      - name: Scan Helm chart
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: signalforge_mvp/helm/signforge
+          framework: helm
+          quiet: true
+          soft_fail: true
+          output_format: cli
