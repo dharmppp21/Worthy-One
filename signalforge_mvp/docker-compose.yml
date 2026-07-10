@@ -40,6 +40,31 @@ services:
     depends_on:
       - backend
 
+  # Demo traffic generator. Gated behind the `simulator` profile so a plain
+  # `docker compose up` does NOT start it — it drives a scripted cascading-
+  # failure scenario into the backend so the dashboard, incident engine and
+  # dependency graph have real data to show. Start it with:
+  #   docker compose --profile simulator up -d --build    (or: make demo)
+  # It waits for the backend to be reachable before it starts emitting.
+  simulator:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    container_name: signalforge-simulator
+    profiles:
+      - simulator
+    environment:
+      - API_URL=http://backend:8000/ingest
+      - API_KEY=sf-api-key-demo
+      - TENANT_ID=demo-company
+      - EVENT_INTERVAL=0.25
+      - NORMAL_EVENTS=50
+      # Run continuously by default; set a positive value for a bounded run.
+      - TOTAL_EVENTS=0
+    depends_on:
+      - backend
+    restart: "no"
+
   postgres:
     # pgvector-enabled Postgres 16 â€” the embeddings migration requires the
     # `vector` extension, which stock postgres:16-alpine does not ship.
