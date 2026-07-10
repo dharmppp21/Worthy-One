@@ -24,6 +24,10 @@ jobs:
         with:
           terraform_version: "1.7.0"
 
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive
+        working-directory: terraform
+
       - name: Validate EKS Complete Example
         run: |
           cd terraform/examples/eks-complete
