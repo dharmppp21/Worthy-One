@@ -2,10 +2,10 @@
 # This file shows all possible variable values and their meanings.
 
 # --- Core ---
-cluster_name = "signforge"
-vpc_id       = ""                    # Empty = create new VPC
-private_subnet_ids = []                # Empty = create new subnets
-public_subnet_ids  = []                # Empty = create new subnets
+cluster_name       = "signforge"
+vpc_id             = "" # Empty = create new VPC
+private_subnet_ids = [] # Empty = create new subnets
+public_subnet_ids  = [] # Empty = create new subnets
 
 # --- Compute ---
 enable_eks = true
@@ -17,14 +17,14 @@ enable_elasticache = true
 enable_msk         = false
 
 # --- Networking ---
-enable_alb       = true
+enable_alb        = true
 enable_cloudfront = false
 
 # --- EKS ---
 eks_node_instance_types = ["t3.medium"]
-eks_desired_capacity      = 2
-eks_min_capacity          = 1
-eks_max_capacity          = 5
+eks_desired_capacity    = 2
+eks_min_capacity        = 1
+eks_max_capacity        = 5
 
 # --- ECS ---
 ecs_task_cpu    = 512

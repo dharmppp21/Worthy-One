@@ -4,7 +4,7 @@ resource "aws_msk_cluster" "main" {
   number_of_broker_nodes = length(var.private_subnet_ids)
 
   broker_node_group_info {
-    instance_type = "kafka.t3.small"
+    instance_type   = "kafka.t3.small"
     client_subnets  = var.private_subnet_ids
     security_groups = [var.security_group_id]
 

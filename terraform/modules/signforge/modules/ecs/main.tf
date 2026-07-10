@@ -22,8 +22,8 @@ resource "aws_ecs_task_definition" "main" {
 
   container_definitions = jsonencode([
     {
-      name  = "signforge"
-      image = var.container_image
+      name      = "signforge"
+      image     = var.container_image
       essential = true
       portMappings = [
         {

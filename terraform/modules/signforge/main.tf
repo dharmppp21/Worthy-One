@@ -1,6 +1,6 @@
 locals {
-  create_vpc = var.vpc_id == "" ? true : false
-  vpc_id     = local.create_vpc ? module.vpc[0].vpc_id : var.vpc_id
+  create_vpc         = var.vpc_id == "" ? true : false
+  vpc_id             = local.create_vpc ? module.vpc[0].vpc_id : var.vpc_id
   private_subnet_ids = local.create_vpc ? module.vpc[0].private_subnet_ids : var.private_subnet_ids
   public_subnet_ids  = local.create_vpc ? module.vpc[0].public_subnet_ids : var.public_subnet_ids
 
@@ -70,12 +70,12 @@ module "elasticache" {
   source = "./modules/elasticache"
   count  = var.enable_elasticache ? 1 : 0
 
-  cluster_name      = var.cluster_name
-  vpc_id            = local.vpc_id
+  cluster_name       = var.cluster_name
+  vpc_id             = local.vpc_id
   private_subnet_ids = local.private_subnet_ids
-  redis_node_type   = var.redis_node_type
-  security_group_id = module.security_groups.redis_sg_id
-  tags              = local.default_tags
+  redis_node_type    = var.redis_node_type
+  security_group_id  = module.security_groups.redis_sg_id
+  tags               = local.default_tags
 }
 
 # ------------------------------------------------------------------
@@ -85,11 +85,11 @@ module "msk" {
   source = "./modules/msk"
   count  = var.enable_msk ? 1 : 0
 
-  cluster_name      = var.cluster_name
-  vpc_id            = local.vpc_id
+  cluster_name       = var.cluster_name
+  vpc_id             = local.vpc_id
   private_subnet_ids = local.private_subnet_ids
-  security_group_id = module.security_groups.kafka_sg_id
-  tags              = local.default_tags
+  security_group_id  = module.security_groups.kafka_sg_id
+  tags               = local.default_tags
 }
 
 # ------------------------------------------------------------------
@@ -99,14 +99,14 @@ module "eks" {
   source = "./modules/eks"
   count  = var.enable_eks ? 1 : 0
 
-  cluster_name             = var.cluster_name
-  vpc_id                   = local.vpc_id
-  private_subnet_ids       = local.private_subnet_ids
-  eks_node_instance_types  = var.eks_node_instance_types
-  eks_desired_capacity     = var.eks_desired_capacity
-  eks_min_capacity         = var.eks_min_capacity
-  eks_max_capacity         = var.eks_max_capacity
-  tags                     = local.default_tags
+  cluster_name            = var.cluster_name
+  vpc_id                  = local.vpc_id
+  private_subnet_ids      = local.private_subnet_ids
+  eks_node_instance_types = var.eks_node_instance_types
+  eks_desired_capacity    = var.eks_desired_capacity
+  eks_min_capacity        = var.eks_min_capacity
+  eks_max_capacity        = var.eks_max_capacity
+  tags                    = local.default_tags
 }
 
 # ------------------------------------------------------------------
@@ -116,16 +116,16 @@ module "ecs" {
   source = "./modules/ecs"
   count  = var.enable_ecs ? 1 : 0
 
-  cluster_name       = var.cluster_name
-  vpc_id             = local.vpc_id
-  private_subnet_ids = local.private_subnet_ids
-  container_image    = var.container_image
-  ecs_task_cpu       = var.ecs_task_cpu
-  ecs_task_memory    = var.ecs_task_memory
+  cluster_name            = var.cluster_name
+  vpc_id                  = local.vpc_id
+  private_subnet_ids      = local.private_subnet_ids
+  container_image         = var.container_image
+  ecs_task_cpu            = var.ecs_task_cpu
+  ecs_task_memory         = var.ecs_task_memory
   task_execution_role_arn = module.iam.ecs_execution_role_arn
-  task_role_arn       = module.iam.ecs_task_role_arn
-  security_group_id  = module.security_groups.backend_sg_id
-  tags               = local.default_tags
+  task_role_arn           = module.iam.ecs_task_role_arn
+  security_group_id       = module.security_groups.backend_sg_id
+  tags                    = local.default_tags
 }
 
 # ------------------------------------------------------------------
@@ -150,7 +150,7 @@ module "cloudfront" {
   source = "./modules/cloudfront"
   count  = var.enable_cloudfront ? 1 : 0
 
-  cluster_name       = var.cluster_name
-  alb_dns_name       = var.enable_alb ? module.alb[0].dns_name : ""
-  tags               = local.default_tags
+  cluster_name = var.cluster_name
+  alb_dns_name = var.enable_alb ? module.alb[0].dns_name : ""
+  tags         = local.default_tags
 }
