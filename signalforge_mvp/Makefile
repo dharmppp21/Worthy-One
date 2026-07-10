@@ -1,4 +1,4 @@
-.PHONY: help install dev backend frontend db migrate clean test lint docker-build docker-up docker-down
+.PHONY: help install dev backend frontend db migrate clean test lint docker-build docker-up docker-down demo demo-logs demo-down
 
 PYTHON := python
 VENV := .venv
@@ -23,6 +23,9 @@ help:
 	@echo "  make docker-build - Build Docker image"
 	@echo "  make docker-up    - Start full stack with Docker Compose"
 	@echo "  make docker-down  - Stop Docker Compose stack"
+	@echo "  make demo         - Start full stack + traffic simulator (scripted incident demo)"
+	@echo "  make demo-logs    - Follow the traffic simulator logs"
+	@echo "  make demo-down    - Stop the demo stack (incl. simulator)"
 
 # Installation
 install:
@@ -82,3 +85,15 @@ docker-down:
 
 docker-logs:
 	docker compose -f docker-compose.yml logs -f
+
+# Full stack plus the demo traffic simulator. The `demo` profile enables the
+# simulator service, which streams a scripted cascading-failure scenario into
+# the backend so the dashboard, incidents and dependency graph have live data.
+demo:
+	docker compose -f docker-compose.yml --profile simulator up -d --build
+
+demo-logs:
+	docker compose -f docker-compose.yml --profile simulator logs -f simulator
+
+demo-down:
+	docker compose -f docker-compose.yml --profile simulator down

@@ -122,8 +122,10 @@ docker-compose up -d
 # Wait ~30 seconds for health checks, then verify
 docker-compose ps
 
-# Generate realistic traffic (one-off task, 100 events)
-docker-compose --profile simulator up simulator
+# Generate realistic traffic (scripted cascading-failure scenario).
+# Behind the `simulator` profile, so a plain `up` never starts it. It waits
+# for the backend, then streams events continuously until you stop it.
+docker-compose --profile simulator up -d --build simulator   # or: make demo
 ```
 
 | Service | Port | Purpose |
@@ -191,7 +193,7 @@ docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 1. **Start the stack:** `docker-compose up -d` — all 5 services start, migrations run automatically, Kafka consumer worker starts in background
 2. **Check health:** `curl http://localhost:8000/health` → `{"status":"ok","dependencies":{"database":"available","redis":"available","kafka":"available"}}`
-3. **Generate traffic:** `docker-compose --profile simulator up simulator` — 100 events from 5 services, mix of healthy (200ms, 200 OK) and failing (500, 1500ms+ latency)
+3. **Generate traffic:** `docker-compose --profile simulator up -d --build simulator` (or `make demo`) — streams events from 5 services: ~50 healthy events, then a bad `notification-service` deploy that cascades into `checkout-service` failures (500s, 1500ms+ latency)
 4. **Open dashboard:** `http://localhost:8080` — you'll see a "Live Service Incidents" feed. Within 5-10 seconds, an incident appears for `checkout-service` (red, critical severity)
 5. **Click the incident:** Opens detail panel with timeline, evidence, and root-cause panel. Root cause shows deployment correlation (if a deployment happened within 30 min), anomaly stats, and service graph
 6. **Check runbooks:** Click "Runbooks" tab — create a runbook for `checkout-service`: "Check payment-service health, verify inventory-service connectivity, escalate if p95 > 2000ms"
