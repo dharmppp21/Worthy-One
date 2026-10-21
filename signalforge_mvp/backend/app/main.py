@@ -15,6 +15,7 @@ from app.routers import (
     health,
     incidents,
     ingest,
+    otlp,
     root_cause,
     runbooks,
     search,
@@ -140,6 +141,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(ingest.router)
+    app.include_router(otlp.router)
     app.include_router(events.router)
     app.include_router(deployments.router)
     app.include_router(runbooks.router)
