@@ -23,6 +23,7 @@ class IncidentTimelineEvent(str, Enum):
     created = "created"
     status_changed = "status_changed"
     evidence_added = "evidence_added"
+    remediation = "remediation"
 
 
 class CorrelationMetadata(BaseModel):
@@ -168,6 +169,37 @@ class Incident(BaseModel):
 
 class IncidentStatusUpdate(BaseModel):
     status: IncidentStatus
+    actor: str = Field(default="operator", min_length=1, max_length=100)
+    note: str | None = Field(default=None, max_length=500)
+
+    @field_validator("actor")
+    @classmethod
+    def strip_actor(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("actor cannot be blank")
+        return cleaned
+
+
+class RemediationProposal(BaseModel):
+    """A guarded remediation suggestion for an incident.
+
+    SignalForge never executes infrastructure changes itself: this is a
+    recommendation. Acting on it requires an explicit operator decision,
+    recorded on the incident timeline for audit.
+    """
+
+    incident_id: str
+    service_name: str
+    action: str  # "rollback" | "investigate"
+    from_version: str | None = None
+    to_version: str | None = None
+    summary: str
+    requires_approval: bool
+
+
+class RemediationDecision(BaseModel):
+    approved: bool
     actor: str = Field(default="operator", min_length=1, max_length=100)
     note: str | None = Field(default=None, max_length=500)
 

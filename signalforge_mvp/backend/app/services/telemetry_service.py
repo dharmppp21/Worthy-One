@@ -7,12 +7,16 @@ from app.services.event_processor import event_processor
 
 from app.anomaly import analyze_service_window
 from app.incident_engine import maybe_create_incident
+from app.remediation import propose_rollback
 from app.routers.websocket import broadcast_incident_event
 from app.schemas import (
+    IncidentStatus,
     IncidentStatusUpdate,
     IncidentTimelineEntry,
     IncidentTimelineEvent,
     IngestResponse,
+    RemediationDecision,
+    RemediationProposal,
     TelemetryEvent,
 )
 from app.storage import store
@@ -90,6 +94,58 @@ def update_incident_status(incident_id: str, update: IncidentStatusUpdate, tenan
     )
 
     updated = store.update_incident_status(incident_id, update.status, timeline_entry)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    try:
+        asyncio.create_task(broadcast_incident_event("incident_updated", updated.model_dump(mode="json")))
+    except RuntimeError:
+        pass
+    return updated
+
+
+def get_remediation_proposal(incident_id: str, tenant_id: str) -> RemediationProposal:
+    incident = get_incident_detail(incident_id, tenant_id=tenant_id)
+    return propose_rollback(incident)
+
+
+def apply_remediation_decision(incident_id: str, decision: RemediationDecision, tenant_id: str):
+    """Record an operator's approve/reject of the rollback proposal.
+
+    This never performs the rollback — it audits the human decision. Approving
+    marks the incident mitigated; rejecting leaves the status unchanged.
+    """
+    incident = get_incident_detail(incident_id, tenant_id=tenant_id)
+    proposal = propose_rollback(incident)
+    if proposal.action != "rollback":
+        raise HTTPException(
+            status_code=400, detail="No rollback remediation is available for this incident."
+        )
+
+    now = datetime.now(timezone.utc)
+    verb = "approved" if decision.approved else "rejected"
+    message = (
+        f"Rollback {verb} by {decision.actor}: {incident.service_name} "
+        f"v{proposal.from_version} -> v{proposal.to_version or 'previous'}."
+    )
+    if decision.note:
+        message = f"{message} Note: {decision.note}"
+
+    timeline_entry = IncidentTimelineEntry(
+        timestamp=now,
+        event_type=IncidentTimelineEvent.remediation,
+        message=message,
+        actor=decision.actor,
+        metadata={
+            "approved": decision.approved,
+            "action": "rollback",
+            "from_version": proposal.from_version,
+            "to_version": proposal.to_version,
+        },
+    )
+
+    # Approving a rollback mitigates the incident; rejecting keeps the status.
+    new_status = IncidentStatus.mitigated if decision.approved else incident.status
+    updated = store.update_incident_status(incident_id, new_status, timeline_entry)
     if updated is None:
         raise HTTPException(status_code=404, detail="Incident not found")
     try:
