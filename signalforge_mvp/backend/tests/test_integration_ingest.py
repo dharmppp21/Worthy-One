@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 from app.schemas import EventType, TelemetryEvent
 from app.storage import store
@@ -137,9 +138,11 @@ class TestIngestToIncidentFlow:
         inc_id = client.get("/incidents").json()["incidents"][0]["id"]
         client.patch(f"/incidents/{inc_id}/status", json={"status": "resolved", "actor": "test"})
 
-        # New batch of bad events should create a second incident
-        for i in range(20, 40):
-            client.post("/ingest", json=make_request_event(i, "checkout-service", 500, 2000))
+        # New batch of bad events creates a second incident once the anti-flap
+        # reopen cooldown has elapsed.
+        with patch("app.storage.INCIDENT_REOPEN_COOLDOWN", timedelta(0)):
+            for i in range(20, 40):
+                client.post("/ingest", json=make_request_event(i, "checkout-service", 500, 2000))
 
         incidents = client.get("/incidents").json()
         assert incidents["count"] == 2

@@ -26,7 +26,7 @@ from typing import Optional, Set
 from app.anomaly import analyze_service_window
 from app.discovery.correlation import EventServiceCorrelator
 from app.incident_engine import maybe_create_incident
-from app.schemas import CorrelationMetadata, TelemetryEvent
+from app.schemas import CorrelationMetadata, EventType, TelemetryEvent
 from app.storage import store
 
 logger = logging.getLogger(__name__)
@@ -68,12 +68,15 @@ class EventProcessor:
         if not stored:
             return {"accepted": True, "duplicate": True, "event_id": event.event_id}
 
-        # Stage 2: Anomaly detection on rolling window
-        recent_events = store.get_recent_events(event.tenant_id, event.service_name)
-        anomaly = analyze_service_window(recent_events)
-
-        # Stage 3: Incident creation if anomaly detected
-        maybe_create_incident(event, anomaly, recent_events)
+        # Stages 2-3 only fire on request metrics — the sole signal the anomaly
+        # detector consumes. Logs, deployments and traces are stored for context
+        # but must not trigger incident evaluation: doing so re-runs the same
+        # window on an unrelated event and mis-attributes the incident's trigger
+        # (and reopens an incident the moment it's resolved).
+        if event.event_type == EventType.metric and event.name == "http_request":
+            recent_events = store.get_recent_events(event.tenant_id, event.service_name)
+            anomaly = analyze_service_window(recent_events)
+            maybe_create_incident(event, anomaly, recent_events)
 
         return {"accepted": True, "duplicate": False, "event_id": event.event_id}
 

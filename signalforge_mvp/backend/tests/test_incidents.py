@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 from app.anomaly import AnomalyResult, WindowStats
 from app.incident_engine import maybe_create_incident
@@ -75,10 +76,31 @@ def test_resolved_incident_allows_future_incident_for_same_service():
         tenant_id="demo-company",
     )
 
-    second = maybe_create_incident(make_event(2), anomaly, [make_event(2)])
+    # Resolved (unlike mitigated) allows a future incident for the same
+    # service, once the anti-flap reopen cooldown has elapsed.
+    with patch("app.storage.INCIDENT_REOPEN_COOLDOWN", timedelta(0)):
+        second = maybe_create_incident(make_event(2), anomaly, [make_event(2)])
 
     assert second is not None
     assert len(store.list_incidents()) == 2
+
+
+def test_resolved_incident_reopen_is_blocked_during_cooldown():
+    reset_store()
+    anomaly = make_anomaly()
+
+    first = maybe_create_incident(make_event(1), anomaly, [make_event(1)])
+    assert first is not None
+    update_incident_status(
+        first.id,
+        IncidentStatusUpdate(status=IncidentStatus.resolved, actor="test", note="Recovered"),
+        tenant_id="demo-company",
+    )
+
+    # Re-breaching immediately must NOT reopen the incident within the cooldown.
+    second = maybe_create_incident(make_event(2), anomaly, [make_event(2)])
+    assert second is None
+    assert len(store.list_incidents()) == 1
 
 
 def test_status_update_changes_status_and_appends_timeline():

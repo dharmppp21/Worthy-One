@@ -19,6 +19,23 @@ from app.schemas import (
 )
 
 
+# After an incident is resolved, suppress reopening one for the same service
+# for this long, so the rolling window draining the triggering events can't
+# immediately re-breach and flap the incident open again.
+INCIDENT_REOPEN_COOLDOWN = timedelta(minutes=2)
+
+
+def _within_cooldown(resolved_at: datetime | None, now: datetime) -> bool:
+    """True if `now` falls within INCIDENT_REOPEN_COOLDOWN after `resolved_at`."""
+    if resolved_at is None:
+        return False
+    if resolved_at.tzinfo is None:
+        resolved_at = resolved_at.replace(tzinfo=timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    return (now - resolved_at) < INCIDENT_REOPEN_COOLDOWN
+
+
 def _pgvector_available(session) -> bool:
     """Check if pgvector extension is available in the current database."""
     try:
@@ -161,6 +178,20 @@ class DatabaseStore:
                 .first()
             )
             if existing is not None:
+                return False
+
+            # Cooldown: don't reopen a just-resolved incident for the same
+            # service while the window that triggered it is still draining.
+            latest_resolved = (
+                session.query(IncidentModel)
+                .filter_by(tenant_id=incident.tenant_id, service_name=incident.service_name)
+                .filter(IncidentModel.status == "resolved")
+                .order_by(IncidentModel.updated_at.desc())
+                .first()
+            )
+            if latest_resolved is not None and _within_cooldown(
+                latest_resolved.updated_at, incident.created_at
+            ):
                 return False
 
             db_incident = IncidentModel(
