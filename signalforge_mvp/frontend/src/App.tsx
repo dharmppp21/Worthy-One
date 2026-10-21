@@ -4,6 +4,7 @@ import {
   fetchAITriage, fetchIncidentDetail, fetchIncidents, fetchRootCause, fetchServiceGraph,
   searchKnowledgeBase, updateIncidentStatus, ApiError,
   fetchDiscoveredServices, fetchAutoGraph, fetchServicesHealth,
+  fetchRemediation, decideRemediation,
 } from "./api";
 import { fetchRunbooks, createRunbook, deleteRunbook, API_BASE_URL } from "./api";
 import { RunbookPanel } from "./components/RunbookPanel";
@@ -17,8 +18,16 @@ const WS_BASE_URL = API_BASE_URL.replace(/^http/, "ws");
 const queryClient = new QueryClient();
 
 /* ─────────── Helpers ─────────── */
+function parseUtc(iso: string): Date {
+  // Backend datetimes are UTC, but SQLite round-trips can drop the timezone
+  // suffix. Treat a timestamp without an explicit zone as UTC, not local,
+  // otherwise relative times are skewed by the viewer's offset.
+  const hasZone = /[Zz]$|[+-]\d{2}:?\d{2}$/.test(iso);
+  return new Date(hasZone ? iso : `${iso}Z`);
+}
+
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", {
+  return parseUtc(iso).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -28,7 +37,7 @@ function formatDate(iso: string): string {
 }
 
 function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
+  const diff = Date.now() - parseUtc(iso).getTime();
   const seconds = Math.floor(diff / 1000);
   if (seconds < 60) return "just now";
   const minutes = Math.floor(seconds / 60);
@@ -198,6 +207,88 @@ function RelatedRunbooks({ serviceName }: { serviceName: string }) {
             )}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function RemediationPanel({ incident }: { incident: Incident }) {
+  const queryClient = useQueryClient();
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["remediation", incident.id],
+    queryFn: () => fetchRemediation(incident.id),
+    enabled: !!incident.id,
+  });
+
+  if (isLoading || !data) return null;
+
+  // No deployment to roll back — show the manual-investigation guidance only.
+  if (data.action !== "rollback") {
+    return (
+      <div className="detail-section">
+        <h4>Remediation</h4>
+        <p className="empty-hint">{data.summary}</p>
+      </div>
+    );
+  }
+
+  const priorDecision = [...incident.timeline]
+    .reverse()
+    .find((e) => e.event_type === "remediation");
+
+  async function decide(approved: boolean) {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await decideRemediation(incident.id, approved);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["incident", incident.id] }),
+        queryClient.invalidateQueries({ queryKey: ["incidents"] }),
+        queryClient.invalidateQueries({ queryKey: ["remediation", incident.id] }),
+      ]);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.userMessage() : "Failed to record the decision.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="detail-section">
+      <h4>Remediation</h4>
+      <div className="remediation-card">
+        <div className="remediation-head">
+          <span className="remediation-action">Rollback</span>
+          <span className="remediation-versions">
+            v{data.from_version} → v{data.to_version ?? "previous"}
+          </span>
+          <span className="remediation-gate">requires approval</span>
+        </div>
+        <p className="remediation-summary">{data.summary}</p>
+        {priorDecision ? (
+          <p className="remediation-decided">✓ {priorDecision.message}</p>
+        ) : (
+          <div className="remediation-actions">
+            <button
+              className="remediation-btn remediation-approve"
+              disabled={submitting}
+              onClick={() => decide(true)}
+            >
+              {submitting ? "Working…" : "Approve rollback"}
+            </button>
+            <button
+              className="remediation-btn remediation-reject"
+              disabled={submitting}
+              onClick={() => decide(false)}
+            >
+              Reject
+            </button>
+          </div>
+        )}
+        {error && <p className="remediation-error">{error}</p>}
       </div>
     </div>
   );
@@ -409,6 +500,7 @@ function IncidentDetail({
 
           <RelatedRunbooks serviceName={incident.service_name} />
           <RootCausePanel serviceName={incident.service_name} />
+          <RemediationPanel incident={incident} />
           <AITriagePanel incidentId={incident.id} />
 
           <div className="detail-section">

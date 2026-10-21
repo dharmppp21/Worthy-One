@@ -1,4 +1,4 @@
-import type { AITriageResponse, Incident, IncidentTimelineEntry, RootCauseResponse, Runbook, ServiceGraphResponse, SearchResponse } from "./types";
+import type { AITriageResponse, Incident, IncidentTimelineEntry, RemediationProposal, RootCauseResponse, Runbook, ServiceGraphResponse, SearchResponse } from "./types";
 
 // In the production build the app is served by nginx, which proxies `/api` to
 // the backend (same-origin, no CORS). In Vite dev we call the backend directly.
@@ -60,6 +60,23 @@ export async function fetchAITriage(incidentId: string): Promise<AITriageRespons
 
 export async function fetchRootCause(serviceName: string): Promise<RootCauseResponse> {
   return apiFetch<RootCauseResponse>(`/services/${encodeURIComponent(serviceName)}/root-cause`);
+}
+
+export async function fetchRemediation(incidentId: string): Promise<RemediationProposal> {
+  return apiFetch<RemediationProposal>(`/incidents/${encodeURIComponent(incidentId)}/remediation`);
+}
+
+export async function decideRemediation(
+  incidentId: string,
+  approved: boolean,
+  actor: string = "dashboard-operator",
+  note?: string
+): Promise<Incident> {
+  return apiFetch<Incident>(`/incidents/${encodeURIComponent(incidentId)}/remediation/decision`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ approved, actor, note }),
+  });
 }
 
 export async function searchKnowledgeBase(query: string, semantic: boolean = false): Promise<SearchResponse> {

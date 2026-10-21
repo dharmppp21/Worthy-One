@@ -17,10 +17,20 @@ export type ServiceGraphResponse = {
 
 export type IncidentTimelineEntry = {
   timestamp: string;
-  event_type: "created" | "status_changed" | "evidence_added";
+  event_type: "created" | "status_changed" | "evidence_added" | "remediation";
   message: string;
   actor: string;
   metadata: Record<string, any>;
+};
+
+export type RemediationProposal = {
+  incident_id: string;
+  service_name: string;
+  action: "rollback" | "investigate";
+  from_version: string | null;
+  to_version: string | null;
+  summary: string;
+  requires_approval: boolean;
 };
 
 export type Incident = {
