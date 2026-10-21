@@ -103,6 +103,18 @@ def test_resolved_incident_reopen_is_blocked_during_cooldown():
     assert len(store.list_incidents()) == 1
 
 
+def test_new_incident_sends_one_notification():
+    reset_store()
+    anomaly = make_anomaly()
+
+    with patch("app.incident_engine.notify_incident") as notify:
+        first = maybe_create_incident(make_event(1), anomaly, [make_event(1)])
+        dup = maybe_create_incident(make_event(2), anomaly, [make_event(2)])
+
+    assert first is not None and dup is None
+    notify.assert_called_once()  # fired on the new incident, never on the dedup
+
+
 def test_status_update_changes_status_and_appends_timeline():
     reset_store()
     anomaly = make_anomaly()
