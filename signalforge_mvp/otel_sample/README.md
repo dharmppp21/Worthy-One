@@ -18,6 +18,7 @@ traffic simulator with a **real** telemetry source.
    $env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:8000"
    $env:OTEL_EXPORTER_OTLP_HEADERS  = "x-api-key=sf-api-key-demo"
    $env:OTEL_SERVICE_NAME           = "payment-service"
+   $env:SERVICE_VERSION             = "1"
    .\.venv\Scripts\python -m uvicorn main:app --port 8090
    ```
 3. Generate load (≥20 requests arms the anomaly detector):
@@ -29,15 +30,21 @@ traffic simulator with a **real** telemetry source.
 
 ## Simulate a bad deploy
 
-Restart the sample with `BROKEN=1` (500s + high latency), then send load again:
+Restart the sample as a new version with `BROKEN=1` (500s + high latency), then
+send load again:
 ```powershell
 $env:BROKEN = "1"
+$env:SERVICE_VERSION = "2"
 .\.venv\Scripts\python -m uvicorn main:app --port 8090
 # in another terminal:
 1..30 | ForEach-Object { try { Invoke-WebRequest -UseBasicParsing http://localhost:8090/charge | Out-Null } catch {} }
 ```
-Within a few seconds SignalForge opens a `payment-service` incident from **real**
-OTel data.
+The version change (`1` → `2`) is recorded as a **deployment**, and within a few
+seconds SignalForge opens a `payment-service` incident from **real** OTel data.
+Because the incident correlates with a fresh deployment, the incident's
+root-cause ranking now scores the deployment dimension, and
+`GET /incidents/{id}/remediation` proposes rolling back **v2 → v1** — pending
+operator approval.
 
 ## Show a dependency edge
 
@@ -52,5 +59,6 @@ outbound call produces a `service_call` span → a dependency edge in the topolo
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | SignalForge backend base URL | — (required) |
 | `OTEL_EXPORTER_OTLP_HEADERS` | must include `x-api-key=<key>` | — (required) |
 | `OTEL_SERVICE_NAME` | service name shown in SignalForge | `payment-service` |
+| `SERVICE_VERSION` | reported `service.version`; bump it to record a deploy | `1` |
 | `PAYMENT_URL` | optional downstream dependency to call | unset |
 | `BROKEN` | `1` = fail + slow (bad-deploy demo) | `0` |
