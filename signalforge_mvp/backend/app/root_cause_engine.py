@@ -146,18 +146,47 @@ def _score_trace_dependency_impact(
     return score, reason, None
 
 
-def _score_runbook_similarity(service_name: str) -> tuple[int, str, str | None]:
-    """Score based on existence of runbooks or similar incidents."""
+def _recent_resolved_incident(service_name: str):
+    """Most recent resolved incident for this service (newest first), or None."""
+    for incident in store.list_incidents():
+        if incident.service_name == service_name and incident.status.value == "resolved":
+            return incident
+    return None
+
+
+def _resolution_note(incident) -> str | None:
+    """Extract the note an operator left when resolving a past incident."""
+    for entry in reversed(incident.timeline):
+        if entry.event_type.value == "status_changed" and (entry.metadata or {}).get("to_status") == "resolved":
+            message = entry.message or ""
+            if "Note: " in message:
+                return message.split("Note: ", 1)[1].strip()
+            return None
+    return None
+
+
+def _score_history(service_name: str, current_title: str) -> tuple[int, str, str | None, str | None]:
+    """Score from prior resolved incidents and runbooks for this service.
+
+    Returns (score, reason, details, resolution_hint). resolution_hint — how a
+    similar past incident was resolved — drives a concrete recommendation.
+    """
+    past = _recent_resolved_incident(service_name)
+    if past is not None:
+        resolution = _resolution_note(past)
+        matches = bool(current_title) and past.title == current_title
+        score = 10 if matches else 7
+        reason = f"A prior {'matching ' if matches else ''}incident on this service was resolved before"
+        if resolution:
+            reason += f" — last resolution: \"{resolution}\""
+        reason += "."
+        return score, reason, f"Prior resolved incident: {past.title}", resolution
+
     runbooks = store.list_runbooks(service_name=service_name)
     if runbooks:
-        return 10, f"Runbook available: '{runbooks[0].title}'.", None
+        return 5, f"Runbook available: '{runbooks[0].title}'.", None, None
 
-    # Check if similar incidents exist (same service, different time)
-    similar = store.search_incidents(service_name)
-    if len(similar) > 1:
-        return 5, f"{len(similar)} similar incident(s) recorded for this service.", None
-
-    return 0, "No runbook or similar incidents found.", None
+    return 0, "No prior resolved incidents or runbooks for this service.", None, None
 
 
 def _confidence_level(total_score: int) -> str:
@@ -168,13 +197,13 @@ def _confidence_level(total_score: int) -> str:
     return "low"
 
 
-def _recommended_action(total_score: int, deployment_score: int, has_runbook: bool) -> str:
+def _recommended_action(total_score: int, deployment_score: int, resolution_hint: str | None) -> str:
     if total_score >= 70 and deployment_score >= 15:
         return "Rollback the recent deployment and monitor recovery."
+    if resolution_hint:
+        return f'A prior incident here was resolved by: "{resolution_hint}". Try that, then verify.'
     if total_score >= 70 and deployment_score < 15:
         return "Investigate infrastructure or upstream dependency issues."
-    if has_runbook:
-        return "Follow the available runbook steps and monitor metrics."
     if total_score >= 40:
         return "Check service logs and health endpoints; review recent config changes."
     return "Gather more telemetry; monitor for pattern emergence."
@@ -190,37 +219,41 @@ def rank_root_causes(service_name: str, tenant_id: str = "default") -> RootCause
     hypotheses: list[RootCauseHypothesis] = []
 
     for svc in services_to_analyze:
+        # Anomaly severity + the current incident title are only meaningful for
+        # the primary service with an open incident.
+        anom_score = 0
+        anom_reason = "No open incident for this service."
+        anom_detail = None
+        current_title = ""
+        if svc == service_name:
+            open_incidents = [
+                i for i in store.list_incidents()
+                if i.service_name == svc and i.status.value != "resolved"
+            ]
+            if open_incidents:
+                current_title = open_incidents[0].title
+                anom_score, anom_reason, anom_detail = _score_anomaly_severity(open_incidents[0])
+
         # Gather evidence for each scoring dimension
         dep_score, dep_reason, dep_detail = _score_deployment_recency(tenant_id, svc)
         log_score, log_reason, log_detail = _score_error_log_frequency(tenant_id, svc)
         trace_score, trace_reason, trace_detail = _score_trace_dependency_impact(tenant_id, svc)
-        rb_score, rb_reason, rb_detail = _score_runbook_similarity(svc)
+        hist_score, hist_reason, hist_detail, resolution_hint = _score_history(svc, current_title)
 
-        # Anomaly severity: only meaningful for the primary service with an open incident
-        anom_score = 0
-        anom_reason = "No open incident for this service."
-        anom_detail = None
-        if svc == service_name:
-            incidents = store.list_incidents()
-            open_incidents = [i for i in incidents if i.service_name == svc and i.status.value != "resolved"]
-            if open_incidents:
-                anom_score, anom_reason, anom_detail = _score_anomaly_severity(open_incidents[0])
-
-        total_score = dep_score + anom_score + log_score + trace_score + rb_score
+        total_score = dep_score + anom_score + log_score + trace_score + hist_score
 
         evidence = [
             RootCauseEvidence(type="deployment", score=dep_score, reason=dep_reason, details=dep_detail),
             RootCauseEvidence(type="anomaly", score=anom_score, reason=anom_reason, details=anom_detail),
             RootCauseEvidence(type="logs", score=log_score, reason=log_reason, details=log_detail),
             RootCauseEvidence(type="traces", score=trace_score, reason=trace_reason, details=trace_detail),
-            RootCauseEvidence(type="runbook", score=rb_score, reason=rb_reason, details=rb_detail),
+            RootCauseEvidence(type="history", score=hist_score, reason=hist_reason, details=hist_detail),
         ]
 
         # Sort evidence by score descending for display
         evidence.sort(key=lambda e: e.score, reverse=True)
 
-        has_runbook = rb_score >= 10
-        action = _recommended_action(total_score, dep_score, has_runbook)
+        action = _recommended_action(total_score, dep_score, resolution_hint)
 
         hypotheses.append(
             RootCauseHypothesis(
