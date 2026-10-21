@@ -29,6 +29,11 @@ class Config:
     RATE_LIMIT_RPS: int = int(os.environ.get("RATE_LIMIT_RPS", "1000"))
     RATE_LIMIT_WINDOW_SECONDS: int = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
 
+    # Reject request bodies larger than this (bytes) with HTTP 413. Protects the
+    # ingestion endpoints from memory exhaustion. Default 5 MiB; raise for very
+    # large OTLP batches.
+    MAX_REQUEST_BODY_BYTES: int = int(os.environ.get("MAX_REQUEST_BODY_BYTES", str(5 * 1024 * 1024)))
+
     @classmethod
     def is_production(cls) -> bool:
         return cls.ENVIRONMENT.lower() == "production"

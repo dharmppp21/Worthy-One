@@ -7,6 +7,7 @@ from app.config import config
 from app.logging_config import configure_logging
 from app.middleware.error_handler import register_exception_handlers
 from app.middleware.request_logging import RequestLoggingMiddleware
+from app.middleware.body_size import MaxBodySizeMiddleware
 from app.routers import (
     ai_triage,
     deployments,
@@ -133,6 +134,10 @@ def create_app() -> FastAPI:
 
     # Request logging — adds request_id and logs every request/response
     app.add_middleware(RequestLoggingMiddleware)
+
+    # Body-size cap — reject oversized payloads (413) before they are read.
+    # Added last so it runs outermost, ahead of the heavier middleware.
+    app.add_middleware(MaxBodySizeMiddleware, max_bytes=config.MAX_REQUEST_BODY_BYTES)
 
     # Safe error handling — no stack traces leaked to clients in production
     register_exception_handlers(app)

@@ -25,6 +25,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request, Response, status
 
 from app.auth import get_current_tenant
+from app.middleware.rate_limit import rate_limit_dependency
 from app.schemas import EventType, TelemetryEvent
 from app.services.event_processor import event_processor
 from app.storage import store
@@ -234,7 +235,7 @@ def _map_to_events(req, tenant_id: str) -> list[TelemetryEvent]:
     return events
 
 
-@router.post("/v1/traces")
+@router.post("/v1/traces", dependencies=[Depends(rate_limit_dependency)])
 async def receive_traces(
     request: Request, tenant_id: str = Depends(get_current_tenant)
 ) -> Response:
