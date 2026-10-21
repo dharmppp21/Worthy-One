@@ -1,17 +1,30 @@
-"""Simple API key authentication and tenant isolation for SignalForge.
+"""API key authentication and tenant isolation for SignalForge.
 
-Production-grade systems use JWT tokens, OAuth2, or API gateways.
-For this MVP, we use a simple API key header (X-API-Key) that maps to a tenant.
-This gives a clear enterprise security story while keeping the demo lightweight.
+Keys are configured out-of-band (``SIGNALFORGE_API_KEYS`` env var, parsed in
+config) rather than hardcoded, and compared in constant time so a wrong key
+cannot be distinguished from a valid one by response timing. Production-grade
+systems would layer JWT/OAuth2 or an API gateway on top; this is the baseline.
 """
+
+import hmac
 
 from fastapi import Header, HTTPException, status
 
-# Map API keys to tenant IDs. In production, this would be a database lookup.
-API_KEY_TENANTS: dict[str, str] = {
-    "sf-api-key-demo": "demo-company",
-    "sf-test-key": "demo-company",
-}
+from app.config import config
+
+
+def _lookup_tenant(api_key: str) -> str | None:
+    """Return the tenant for an API key, or None. Constant-time comparison.
+
+    Compares against every configured key (no early exit) with
+    hmac.compare_digest, so neither a wrong key's bytes nor its position leaks
+    through timing.
+    """
+    matched: str | None = None
+    for key, tenant in config.API_KEYS.items():
+        if hmac.compare_digest(api_key, key):
+            matched = tenant
+    return matched
 
 
 def get_current_tenant(x_api_key: str = Header(default="", alias="X-API-Key")) -> str:
@@ -25,7 +38,7 @@ def get_current_tenant(x_api_key: str = Header(default="", alias="X-API-Key")) -
             detail="Missing X-API-Key header",
             headers={"WWW-Authenticate": "ApiKey"},
         )
-    tenant_id = API_KEY_TENANTS.get(x_api_key)
+    tenant_id = _lookup_tenant(x_api_key)
     if not tenant_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -42,4 +55,4 @@ def get_current_tenant_optional(x_api_key: str = Header(default="", alias="X-API
     """
     if not x_api_key:
         return "default"
-    return API_KEY_TENANTS.get(x_api_key, "default")
+    return _lookup_tenant(x_api_key) or "default"

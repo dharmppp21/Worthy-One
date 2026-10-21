@@ -7,6 +7,22 @@ and easy to document.
 
 import os
 
+# Dev-only fallback API keys. In production, keys MUST come from the
+# SIGNALFORGE_API_KEYS env var; if it is unset there we fail closed (no keys),
+# so the demo key never silently grants access to a real deployment.
+_DEFAULT_DEV_API_KEYS = "sf-api-key-demo:demo-company,sf-test-key:demo-company"
+
+
+def _parse_api_keys(raw: str) -> dict[str, str]:
+    """Parse ``key:tenant,key2:tenant2`` into a {api_key: tenant_id} map."""
+    mapping: dict[str, str] = {}
+    for pair in raw.split(","):
+        key, sep, tenant = pair.partition(":")
+        key, tenant = key.strip(), tenant.strip()
+        if key and sep and tenant:
+            mapping[key] = tenant
+    return mapping
+
 
 class Config:
     """Application configuration loaded from environment variables."""
@@ -26,6 +42,15 @@ class Config:
     # Application
     ENVIRONMENT: str = os.environ.get("ENVIRONMENT", "development")
     LOG_LEVEL: str = os.environ.get("LOG_LEVEL", "INFO")
+
+    # API key -> tenant map. From SIGNALFORGE_API_KEYS ("key:tenant,key2:tenant2").
+    # Unset: dev gets demo keys; production fails closed (empty, every request 401).
+    API_KEYS: dict[str, str] = _parse_api_keys(
+        os.environ.get(
+            "SIGNALFORGE_API_KEYS",
+            "" if ENVIRONMENT.lower() == "production" else _DEFAULT_DEV_API_KEYS,
+        )
+    )
     RATE_LIMIT_RPS: int = int(os.environ.get("RATE_LIMIT_RPS", "1000"))
     RATE_LIMIT_WINDOW_SECONDS: int = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
 
