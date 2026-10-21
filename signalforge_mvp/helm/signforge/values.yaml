@@ -107,6 +107,15 @@ env: {}
   # Example:
   # LOG_LEVEL: debug
   # EXTRA_VAR: value
+  #
+  # REQUIRED in production (ENVIRONMENT=production): API key -> tenant map, or
+  # auth fails closed and every request gets 401. Format "key:tenant,key2:tenant2".
+  # Prefer injecting this from a Kubernetes Secret (e.g. via extraEnvFrom or an
+  # external-secrets operator) rather than committing it here.
+  # SIGNALFORGE_API_KEYS: "sf-prod-key-abc123:acme-corp"
+  #
+  # Optional ingestion guard (bytes); default 5 MiB.
+  # MAX_REQUEST_BODY_BYTES: "5242880"
 
 # Extra config file entries merged into generated config.yaml
 config: {}
