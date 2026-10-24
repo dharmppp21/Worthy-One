@@ -8,6 +8,7 @@ from app.logging_config import configure_logging
 from app.middleware.error_handler import register_exception_handlers
 from app.middleware.request_logging import RequestLoggingMiddleware
 from app.middleware.body_size import MaxBodySizeMiddleware
+from app.metrics import MetricsMiddleware, router as metrics_router
 from app.routers import (
     ai_triage,
     deployments,
@@ -139,12 +140,16 @@ def create_app() -> FastAPI:
     # Added last so it runs outermost, ahead of the heavier middleware.
     app.add_middleware(MaxBodySizeMiddleware, max_bytes=config.MAX_REQUEST_BODY_BYTES)
 
+    # Prometheus RED metrics for every request (self-observability at /metrics).
+    app.add_middleware(MetricsMiddleware)
+
     # Safe error handling — no stack traces leaked to clients in production
     register_exception_handlers(app)
 
     run_migrations()
 
     app.include_router(health.router)
+    app.include_router(metrics_router)
     app.include_router(ingest.router)
     app.include_router(otlp.router)
     app.include_router(events.router)

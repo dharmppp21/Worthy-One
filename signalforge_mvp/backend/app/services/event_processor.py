@@ -26,6 +26,7 @@ from typing import Optional, Set
 from app.anomaly import analyze_service_window
 from app.discovery.correlation import EventServiceCorrelator
 from app.incident_engine import maybe_create_incident
+from app.metrics import EVENTS_INGESTED
 from app.schemas import CorrelationMetadata, EventType, TelemetryEvent
 from app.storage import store
 
@@ -67,6 +68,7 @@ class EventProcessor:
         stored = store.add_event(event)
         if not stored:
             return {"accepted": True, "duplicate": True, "event_id": event.event_id}
+        EVENTS_INGESTED.labels(event.event_type.value).inc()
 
         # Stages 2-3 only fire on request metrics — the sole signal the anomaly
         # detector consumes. Logs, deployments and traces are stored for context

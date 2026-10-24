@@ -14,6 +14,7 @@ from app.storage import store
 
 
 from app.embeddings import embedding_service
+from app.metrics import INCIDENTS_CREATED
 from app.notifications import notify_incident
 from app.routers.websocket import broadcast_incident_event
 
@@ -117,6 +118,7 @@ def maybe_create_incident(
         if embedding:
             store.store_embedding("incident", incident.id, embedding)
     if inserted:
+        INCIDENTS_CREATED.labels(incident.severity).inc()
         notify_incident(incident)
         try:
             import asyncio
