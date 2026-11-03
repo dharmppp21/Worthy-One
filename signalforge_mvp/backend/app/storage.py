@@ -125,12 +125,16 @@ class DatabaseStore:
             session.add(db_event)
             session.commit()
 
-            # Push to Redis hot operational state for fast rolling windows
-            redis_window.add_event(
-                event.tenant_id,
-                event.service_name,
-                event.model_dump(mode="json"),
-            )
+            # Push request metrics to the Redis rolling window used for anomaly
+            # detection. Only http_request samples belong here: logs (e.g. the
+            # span_error events derived from OTLP), traces and deployments would
+            # evict real samples from the fixed-size window and starve detection.
+            if event.event_type == EventType.metric and event.name == "http_request":
+                redis_window.add_event(
+                    event.tenant_id,
+                    event.service_name,
+                    event.model_dump(mode="json"),
+                )
             return True
 
     def list_uncorrelated_events(
