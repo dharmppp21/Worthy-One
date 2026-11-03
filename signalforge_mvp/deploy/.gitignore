@@ -1,0 +1,2 @@
+# The real env file holds API keys and the domain — never commit it.
+.env

@@ -1,0 +1,6 @@
+# Caddy terminates HTTPS for SF_DOMAIN (auto Let's Encrypt) and proxies
+# everything to the nginx frontend, which serves the dashboard and /api.
+{$SF_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy frontend:80
+}

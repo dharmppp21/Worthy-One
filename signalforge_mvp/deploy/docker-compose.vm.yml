@@ -1,0 +1,47 @@
+# SignalForge — persistent VM deploy (e.g. Oracle Cloud Always-Free), with
+# stable HTTPS terminated by Caddy (automatic Let's Encrypt certificates).
+#
+# Run from signalforge_mvp/ :
+#   docker compose --env-file deploy/.env \
+#     -f docker-compose.yml -f deploy/docker-compose.vm.yml up -d --build
+#
+# Caddy is the only public entry point (ports 80/443) and reverse-proxies to the
+# nginx frontend, which serves the dashboard and proxies /api -> backend. Open
+# ONLY 80 and 443 in your cloud firewall; the 8000/8080 host ports the base
+# compose publishes are reachable only from the VM itself.
+services:
+  backend:
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://signalforge:signalforge@postgres:5432/signalforge
+      - ENVIRONMENT=production
+      - SIGNALFORGE_API_KEYS=${SIGNALFORGE_API_KEYS:-sf-api-key-demo:demo-company}
+      - SIGNALFORGE_DISCOVERY_ENABLED=false
+
+  frontend:
+    restart: unless-stopped
+
+  postgres:
+    restart: unless-stopped
+
+  redis:
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - SF_DOMAIN=${SF_DOMAIN}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
