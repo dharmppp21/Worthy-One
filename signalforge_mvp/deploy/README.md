@@ -1,13 +1,12 @@
 # SignalForge — persistent deploy (Oracle Cloud Always-Free VM)
 
-A stable, 24/7, HTTPS deployment for a resume-grade link your dashboard and the
-mobile app can point at permanently. The stack is the same one you ran locally
+A stable, 24/7 HTTPS deployment that the dashboard and the mobile app can point
+at permanently. The stack is the same one you ran locally
 (backend + Postgres + Redis + nginx) with **Caddy** in front for automatic
 HTTPS.
 
-**What you do** (I can't create accounts or enter card details): the Oracle
-signup, the VM, and DNS. **What's prepared for you:** everything else — one
-command brings the whole stack up with a real certificate.
+**Manual steps:** the Oracle signup, the VM and DNS. **Automated:** everything
+else; one command brings the whole stack up with a real certificate.
 
 ---
 

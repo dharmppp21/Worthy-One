@@ -11,6 +11,8 @@ downloads/
 eggs/
 .eggs/
 lib/
+# ...but keep the mobile client's source folder
+!signalforge_mvp/mobile/lib/
 lib64/
 parts/
 sdist/

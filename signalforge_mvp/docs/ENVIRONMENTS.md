@@ -243,5 +243,4 @@ The frontend `DiscoveryEventFeed` component displays these events with color-cod
 
 - [`AWS_ARCHITECTURE.md`](AWS_ARCHITECTURE.md) — AWS deployment with ECS/EKS discovery
 - [`README.md`](README.md) — Quick start and Docker Compose setup
-- [`INTERVIEW_AUTO_DISCOVERY.md`](INTERVIEW_AUTO_DISCOVERY.md) — Interview deep-dive on auto-discovery
 - `backend/app/discovery/` — Source code for the discovery engine

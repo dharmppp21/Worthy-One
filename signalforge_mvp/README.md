@@ -198,8 +198,6 @@ docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 7. **Search:** Click "Search" tab, type "checkout" — returns both the incident and the runbook
 8. **Resolve the incident:** In the detail panel, click "Resolved" — status updates, timeline appends entry, dashboard refreshes. Start simulator again and a new incident appears (resolved allows new, mitigated blocks duplicates)
 
-**What to say in an interview:** "I built the entire pipeline. The simulator generates realistic traffic. The API accepts events in milliseconds. The worker processes them asynchronously. Anomaly detection runs on rolling windows. Incidents are created with structured evidence. The dashboard shows everything in real time."
-
 ---
 
 ## Design Tradeoffs
